@@ -1,12 +1,13 @@
 package agilepool_test
 
 import (
-	agilepool "agilePool"
 	"fmt"
 	"math"
 	"sync"
 	"testing"
 	"time"
+
+	agilepool "github.com/Yiming1997/go-agile-pool"
 )
 
 const (
@@ -20,22 +21,8 @@ const (
 	BenchParam         = 10
 	DefaultExpiredTime = 10 * time.Second
 	burstSize          = 10000
-	FibDepth           = 100000 // 斐波那契计算深度，控制计算强度
+	FibDepth           = 100000
 )
-
-// func demoFunc(n int) {
-
-// 	a, b := 0, 1
-// 	for i := 0; i < n; i++ {
-// 		a, b = b, a+b
-// 	}
-
-// 	// 添加伪结果使用防止编译器优化
-// 	if b == 0 {
-// 		fmt.Println("Impossible")
-// 	}
-
-// }
 
 func cpuIntensiveTask(maxNumber int) int {
 	count := 0
@@ -47,7 +34,6 @@ func cpuIntensiveTask(maxNumber int) int {
 	return count
 }
 
-// 判断一个数是否为质数
 func isPrime(n int) bool {
 	if n <= 1 {
 		return false
@@ -71,7 +57,6 @@ func isPrime(n int) bool {
 func demoFunc(n int) {
 	result := fibonacci(n)
 
-	// 添加伪结果使用防止编译器优化
 	if result == 0 {
 		fmt.Println("Impossible")
 	}
@@ -107,7 +92,7 @@ func BenchmarkGoroutines(b *testing.B) {
 func BenchmarkEfficientPool(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		pool := agilepool.NewPool()
-		pool.InitConfig().WithCleanPeriod(500 * time.Millisecond).WithTaskQueueSize(10000).WithWorkerNumCapacity(10000)
+		pool.InitConfig().WithCleanPeriod(500 * time.Millisecond).WithTaskQueueSize(10000).WithWorkerNumCapacity(20000)
 		pool.Init()
 
 		var wg sync.WaitGroup
@@ -121,12 +106,6 @@ func BenchmarkEfficientPool(b *testing.B) {
 					wg.Done()
 				})
 			}()
-
-			// pool.Submit(func() {
-			// 	time.Sleep(10 * time.Millisecond)
-
-			// 	wg.Done()
-			// })
 
 		}
 

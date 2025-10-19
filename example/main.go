@@ -1,21 +1,22 @@
 package main
 
 import (
-	agilepool "agilePool"
 	"os"
 	"runtime/pprof"
 	"sync"
 	"time"
+
+	agilepool "github.com/Yiming1997/go-agile-pool"
 )
 
 func main() {
 	f, _ := os.Create("cpu_profile.prof")
-	pprof.StartCPUProfile(f)     // 开始记录 CPU 使用
-	defer pprof.StopCPUProfile() // 程序退出前停止
+	pprof.StartCPUProfile(f)
+	defer pprof.StopCPUProfile()
 
 	// memFile, _ := os.Create("mem_profile.prof")
 	// defer func() {
-	// 	runtime.GC() // 触发GC减少干扰
+	// 	runtime.GC() //
 	// 	pprof.WriteHeapProfile(memFile)
 	// 	memFile.Close()
 	// }()
@@ -40,7 +41,7 @@ func main() {
 
 	wait := sync.WaitGroup{}
 
-	for i := 0; i < 20000000; i++ {
+	for i := 0; i < 10000000; i++ {
 		wait.Add(1)
 
 		go func() {
@@ -50,9 +51,6 @@ func main() {
 			})
 		}()
 	}
-	pool.SubmitBefore(func() {
-		defer wait.Done()
-		time.Sleep(10 * time.Millisecond)
-	}, 5*time.Second)
+
 	wait.Wait()
 }

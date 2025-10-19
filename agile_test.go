@@ -1,11 +1,11 @@
 package agilepool_test
 
 import (
-	agilepool "agilePool"
 	"sync"
 	"testing"
 	"time"
 
+	agilepool "github.com/Yiming1997/go-agile-pool"
 	"github.com/stretchr/testify/assert"
 )
 
