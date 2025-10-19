@@ -6,6 +6,10 @@ goAgilePool is a lightweight goroutine pool for Golang, designed for simplicity 
 3. Task timeout control
 4. Automatic cleanup of idle workers upon timeout
 5. Efficient worker reuse through FIFO worker queue management
+
+## Installation
+go get github.com/Yiming1997/go-agile-pool
+
 ## Usage
 **Pool.Submit()**
 ```go
