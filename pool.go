@@ -24,7 +24,7 @@ const (
 )
 
 type Pool struct {
-	taskQueue         chan func()
+	taskQueue         chan Task
 	closePoolCn       chan struct{}
 	capacity          int64 // The maximum number of workers in the pool.
 	runningWorkersNum int64
@@ -76,12 +76,12 @@ func (p *Pool) Init() {
 	}
 
 	p.capacity = p.config.workerNumCapacity
-	p.taskQueue = make(chan func(), p.config.taskQueueSize)
+	p.taskQueue = make(chan Task, p.config.taskQueueSize)
 
 	go p.expiredWorkerCleaner()
 }
 
-func (p *Pool) Submit(task func()) {
+func (p *Pool) Submit(task Task) {
 	p.lock.Lock()
 	if atomic.LoadInt64(&p.runningWorkersNum) < p.capacity {
 		p.addRunningWorkersNum(1)
@@ -102,16 +102,17 @@ func (p *Pool) Submit(task func()) {
 
 }
 
-func (p *Pool) SubmitBefore(task func(), time time.Duration) {
+func (p *Pool) SubmitBefore(task Task, time time.Duration) {
 	ctx, cancel := context.WithTimeout(context.Background(), time)
-	p.Submit(func() {
-		select {
-		case <-ctx.Done():
-			cancel()
-		default:
-			task()
-		}
-	},
+	p.Submit(
+		TaskFunc(func() {
+			select {
+			case <-ctx.Done():
+				cancel()
+			default:
+				task.Process()
+			}
+		}),
 	)
 }
 

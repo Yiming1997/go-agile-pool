@@ -1,5 +1,11 @@
 package agilepool
 
-type Task struct {
-	Fn func()
+type Task interface {
+	Process()
+}
+
+type TaskFunc func()
+
+func (tf TaskFunc) Process() {
+	tf()
 }

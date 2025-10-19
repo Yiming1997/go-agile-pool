@@ -22,13 +22,15 @@ func TestAgilePoolWorkerCapacityLimit(t *testing.T) {
 		wg.Add(1)
 
 		go func() {
-			agilePool.Submit(func() {
-				defer wg.Done()
-				if int(agilePool.GetRunningWorkersNum()) > maxWorkerNum {
-					maxWorkerNum = int(agilePool.GetRunningWorkersNum())
-				}
-				time.Sleep(10 * time.Millisecond)
-			})
+			agilePool.Submit(
+				agilepool.TaskFunc(func() {
+					defer wg.Done()
+					if int(agilePool.GetRunningWorkersNum()) > maxWorkerNum {
+						maxWorkerNum = int(agilePool.GetRunningWorkersNum())
+					}
+					time.Sleep(10 * time.Millisecond)
+				}),
+			)
 		}()
 
 	}

@@ -41,14 +41,15 @@ func main() {
 
 	wait := sync.WaitGroup{}
 
-	for i := 0; i < 10000000; i++ {
+	for i := 0; i < 20000000; i++ {
 		wait.Add(1)
 
 		go func() {
-			pool.Submit(func() {
-				defer wait.Done()
+			pool.Submit(agilepool.TaskFunc(func() {
 				time.Sleep(10 * time.Millisecond)
-			})
+
+				wait.Done()
+			}))
 		}()
 	}
 

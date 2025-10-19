@@ -16,10 +16,10 @@ func newWorker(p *Pool) *worker {
 	}
 	return w
 }
-func (w *worker) run(task func()) {
+func (w *worker) run(task Task) {
 	w.lastActiveAt = time.Now()
 	if task != nil {
-		task()
+		task.Process()
 	}
 
 	defer func() {
@@ -41,7 +41,7 @@ loop:
 				return
 			}
 			w.lastActiveAt = time.Now()
-			task()
+			task.Process()
 
 		default:
 			w.pool.addToIdle(w)
