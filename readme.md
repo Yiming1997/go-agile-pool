@@ -38,7 +38,7 @@ goAgilePool is a lightweight goroutine pool for Golang, designed for simplicity 
 	wait.Wait()
 ```
 
-**Pool.Submit()**    
+**Pool.SubmitBefore()**    
 ```go
 	pool.SubmitBefore(func() {
 		defer wait.Done()
