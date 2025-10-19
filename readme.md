@@ -36,7 +36,7 @@ goAgilePool轻量级的golang goroutine池，简单易用，性能优秀。
 	wait.Wait()
 ```
 
-**Pool.Submit()**    
+**Pool.SubmitBefore()**    
 ```go
 	pool.SubmitBefore(func() {
 		defer wait.Done()
