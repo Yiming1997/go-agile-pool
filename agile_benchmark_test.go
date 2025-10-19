@@ -13,7 +13,7 @@ const (
 	taskCount   = 10000000
 )
 
-func BenchmarkEfficientPool(b *testing.B) {
+func BenchmarkAgilePool(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		pool := agilepool.NewPool()
 		pool.InitConfig().WithCleanPeriod(500 * time.Millisecond).WithTaskQueueSize(10000).WithWorkerNumCapacity(20000)
@@ -26,9 +26,9 @@ func BenchmarkEfficientPool(b *testing.B) {
 			go func() {
 				pool.Submit(agilepool.TaskFunc(func() {
 					time.Sleep(10 * time.Millisecond)
-
 					wg.Done()
 				}))
+
 			}()
 
 		}

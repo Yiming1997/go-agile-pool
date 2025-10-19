@@ -32,7 +32,6 @@ func main() {
 	pool := agilepool.NewPool()
 
 	pool.InitConfig().
-		WithBlockMode(agilepool.BLOCK).
 		WithCleanPeriod(500 * time.Millisecond).
 		WithTaskQueueSize(10000).
 		WithWorkerNumCapacity(20000)

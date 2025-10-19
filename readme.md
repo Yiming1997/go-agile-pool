@@ -50,3 +50,5 @@ go get github.com/Yiming1997/go-agile-pool
 	}, 5*time.Second)
 
 ```
+**benchmark**    
+BenchmarkAgilePool-14    	       1	5795644000 ns/op	490501032 B/op	21123601 allocs/op

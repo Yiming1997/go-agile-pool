@@ -13,14 +13,6 @@ const (
 	DefaultCleanPeriod          = 100 * time.Millisecond
 	DefaultTaskQueueSize        = 10000
 	DefaultMaxWorkerNumCapacity = math.MaxInt64
-	DefaultWorkMode             = BLOCK
-)
-
-type WorkMode int8
-
-const (
-	BLOCK WorkMode = iota
-	NONBLOCK
 )
 
 type Pool struct {
@@ -71,10 +63,6 @@ func (p *Pool) Init() {
 		p.config.workerNumCapacity = DefaultMaxWorkerNumCapacity
 	}
 
-	if p.config.workMode == 0 {
-		p.config.workMode = DefaultWorkMode
-	}
-
 	p.capacity = p.config.workerNumCapacity
 	p.taskQueue = make(chan Task, p.config.taskQueueSize)
 
@@ -83,6 +71,7 @@ func (p *Pool) Init() {
 
 func (p *Pool) Submit(task Task) {
 	p.lock.Lock()
+
 	if atomic.LoadInt64(&p.runningWorkersNum) < p.capacity {
 		p.addRunningWorkersNum(1)
 		p.lock.Unlock()
