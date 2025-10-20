@@ -17,7 +17,6 @@ go get github.com/Yiming1997/go-agile-pool
 
     // Supports chainable configuration for pool parameters  
 	pool.InitConfig().             
-		WithBlockMode(agilepool.BLOCK).
 		WithCleanPeriod(500 * time.Millisecond).
 		WithTaskQueueSize(10000).
 		WithWorkerNumCapacity(20000)
