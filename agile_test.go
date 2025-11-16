@@ -16,12 +16,11 @@ func TestAgilePoolWorkerCapacityLimit(t *testing.T) {
 
 	var maxWorkerNum int = 0
 
-	for i := 0; i < 2000000; i++ {
+	for i := 0; i < 20000000; i++ {
 
 		go func() {
 			agilePool.Submit(
 				agilepool.TaskFunc(func() {
-					agilePool.Wg.Done()
 					if int(agilePool.GetRunningWorkersNum()) > maxWorkerNum {
 						maxWorkerNum = int(agilePool.GetRunningWorkersNum())
 					}
@@ -31,8 +30,8 @@ func TestAgilePoolWorkerCapacityLimit(t *testing.T) {
 		}()
 
 	}
-	agilePool.Wg.Wait()
-	assert.LessOrEqual(t, maxWorkerNum, 20000)
+	agilePool.Wait()
+	assert.LessOrEqual(t, maxWorkerNum, 10000)
 }
 
 func TestAgilePoolWorkerCompletion(t *testing.T) {
@@ -48,16 +47,14 @@ func TestAgilePoolWorkerCompletion(t *testing.T) {
 		go func() {
 			agilePool.Submit(
 				agilepool.TaskFunc(func() {
-					defer agilePool.Wg.Done()
 					atomic.AddInt64(&sum, int64(1))
-					time.Sleep(10 * time.Millisecond)
 				}),
 			)
 		}()
 
 	}
 
-	agilePool.Wg.Wait()
+	agilePool.Wait()
 
 	assert.Equal(t, sum, int64(1000000))
 }

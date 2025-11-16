@@ -37,12 +37,9 @@ func main() {
 
 	pool.Init()
 
-	// wait := sync.WaitGroup{}
-
 	for i := 0; i < 20000000; i++ {
 		go func() {
 			pool.Submit(agilepool.TaskFunc(func() {
-				defer pool.Wg.Done()
 				time.Sleep(10 * time.Millisecond)
 
 			}))
@@ -50,5 +47,5 @@ func main() {
 		}()
 	}
 
-	pool.Wg.Wait()
+	pool.Wait()
 }
