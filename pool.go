@@ -118,7 +118,10 @@ func (p *Pool) SubmitBefore(task Task, time time.Duration) {
 			case <-ctx.Done():
 				cancel()
 			default:
+				// func() {
+				// fmt.Println(11112)
 				task.Process()
+				// }()
 			}
 		}),
 	)
@@ -180,6 +183,10 @@ func (p *Pool) Close() {
 
 func (p *Pool) Wait() {
 	p.wg.Wait()
+}
+
+func (p *Pool) Done() {
+	p.wg.Done()
 }
 
 func (p *Pool) GetRunningWorkersNum() int64 {
