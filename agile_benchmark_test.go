@@ -1,7 +1,6 @@
 package agilepool_test
 
 import (
-	"sync"
 	"testing"
 	"time"
 
@@ -9,8 +8,7 @@ import (
 )
 
 const (
-	workerCount = 10000
-	taskCount   = 10000000
+	taskCount = 10000000
 )
 
 func BenchmarkAgilePool(b *testing.B) {
@@ -19,21 +17,18 @@ func BenchmarkAgilePool(b *testing.B) {
 		pool.InitConfig().WithCleanPeriod(500 * time.Millisecond).WithTaskQueueSize(10000).WithWorkerNumCapacity(20000)
 		pool.Init()
 
-		var wg sync.WaitGroup
-		wg.Add(taskCount)
-
 		for j := 0; j < taskCount; j++ {
 			go func() {
 				pool.Submit(agilepool.TaskFunc(func() {
+					defer pool.Wg.Done()
 					time.Sleep(10 * time.Millisecond)
-					wg.Done()
 				}))
 
 			}()
 
 		}
+		pool.Wg.Wait()
 
-		wg.Wait()
 		pool.Close()
 	}
 }

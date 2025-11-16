@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"runtime/pprof"
-	"sync"
 	"time"
 
 	agilepool "github.com/Yiming1997/go-agile-pool"
@@ -38,19 +37,18 @@ func main() {
 
 	pool.Init()
 
-	wait := sync.WaitGroup{}
+	// wait := sync.WaitGroup{}
 
 	for i := 0; i < 20000000; i++ {
-		wait.Add(1)
-
 		go func() {
 			pool.Submit(agilepool.TaskFunc(func() {
+				defer pool.Wg.Done()
 				time.Sleep(10 * time.Millisecond)
 
-				wait.Done()
 			}))
+
 		}()
 	}
 
-	wait.Wait()
+	pool.Wg.Wait()
 }
