@@ -13,38 +13,31 @@ go get github.com/Yiming1997/go-agile-pool
 ## Usage
 **Pool.Submit()**
 ```go
-    pool := agilepool.NewPool()
+	pool := agilepool.NewPool()
 
-    // Supports chainable configuration for pool parameters  
-	pool.InitConfig().             
+	pool.InitConfig().
 		WithCleanPeriod(500 * time.Millisecond).
 		WithTaskQueueSize(10000).
 		WithWorkerNumCapacity(20000)
 
-    // Start the goroutine pool  
-	pool.Init()                  
-
-	wait := sync.WaitGroup{}
+	pool.Init()
 
 	for i := 0; i < 20000000; i++ {
-		wait.Add(1)
-
 		go func() {
-			pool.Submit(func() {
-				defer wait.Done()
+			pool.Submit(agilepool.TaskFunc(func() {
 				time.Sleep(10 * time.Millisecond)
-			})
-		}()
 
+			}))
+
+		}()
 	}
 
-	wait.Wait()
+	pool.Wait() 
 ```
 
 **Pool.SubmitBefore()**    
 ```go
 	pool.SubmitBefore(func() {
-		defer wait.Done()
 		time.Sleep(10 * time.Millisecond)
 	}, 5*time.Second)
 

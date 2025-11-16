@@ -33,7 +33,7 @@ type Pool struct {
 	idleWorks         *LinkedList[*worker]
 	config            *Config
 	lock              sync.Locker
-	Wg                sync.WaitGroup
+	wg                sync.WaitGroup
 }
 
 func NewPool() *Pool {
@@ -83,7 +83,7 @@ func (p *Pool) Init() {
 }
 
 func (p *Pool) Submit(task Task) {
-	p.Wg.Add(1)
+	p.wg.Add(1)
 	p.lock.Lock()
 
 	if atomic.LoadInt64(&p.runningWorkersNum) < p.capacity {
@@ -102,7 +102,7 @@ func (p *Pool) Submit(task Task) {
 	}
 	p.lock.Unlock()
 	if p.config.workMode == NONBLOCK {
-		p.Wg.Done()
+		p.wg.Done()
 		return
 	}
 
@@ -118,7 +118,10 @@ func (p *Pool) SubmitBefore(task Task, time time.Duration) {
 			case <-ctx.Done():
 				cancel()
 			default:
+				// func() {
+				// fmt.Println(11112)
 				task.Process()
+				// }()
 			}
 		}),
 	)
@@ -176,6 +179,14 @@ func (p *Pool) expiredWorkerCleaner() {
 
 func (p *Pool) Close() {
 	close(p.closePoolCn)
+}
+
+func (p *Pool) Wait() {
+	p.wg.Wait()
+}
+
+func (p *Pool) Done() {
+	p.wg.Done()
 }
 
 func (p *Pool) GetRunningWorkersNum() int64 {

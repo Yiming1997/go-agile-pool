@@ -20,15 +20,13 @@ func BenchmarkAgilePool(b *testing.B) {
 		for j := 0; j < taskCount; j++ {
 			go func() {
 				pool.Submit(agilepool.TaskFunc(func() {
-					defer pool.Wg.Done()
 					time.Sleep(10 * time.Millisecond)
 				}))
 
 			}()
 
 		}
-		pool.Wg.Wait()
-
+		pool.Wait()
 		pool.Close()
 	}
 }
