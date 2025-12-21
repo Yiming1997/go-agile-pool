@@ -20,11 +20,12 @@ func TestAgilePoolWorkerCapacityLimit(t *testing.T) {
 
 		go func() {
 			agilePool.Submit(
-				agilepool.TaskFunc(func() {
+				agilepool.TaskFunc(func() error {
 					if int(agilePool.GetRunningWorkersNum()) > maxWorkerNum {
 						maxWorkerNum = int(agilePool.GetRunningWorkersNum())
 					}
 					time.Sleep(10 * time.Millisecond)
+					return nil
 				}),
 			)
 		}()
@@ -45,8 +46,9 @@ func TestAgilePoolWorkerCompletion(t *testing.T) {
 
 		go func() {
 			agilePool.Submit(
-				agilepool.TaskFunc(func() {
+				agilepool.TaskFunc(func() error {
 					atomic.AddInt64(&sum, int64(1))
+					return nil
 				}),
 			)
 		}()
@@ -69,9 +71,10 @@ func TestAgilePoolSubmitBeforeCompletion(t *testing.T) {
 
 		go func() {
 			agilePool.SubmitBefore(
-				agilepool.TaskFunc(func() {
+				agilepool.TaskFunc(func() error {
 					time.Sleep(10 * time.Millisecond)
 					atomic.AddInt64(&sum, int64(1))
+					return nil
 				}), 10*time.Second,
 			)
 		}()
