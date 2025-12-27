@@ -113,16 +113,14 @@ func (p *Pool) Submit(task Task) {
 func (p *Pool) SubmitBefore(task Task, time time.Duration) {
 	ctx, cancel := context.WithTimeout(context.Background(), time)
 	p.Submit(
-		TaskFunc(func() {
+		TaskFunc(func() error {
 			select {
 			case <-ctx.Done():
 				cancel()
 			default:
-				// func() {
-				// fmt.Println(11112)
 				task.Process()
-				// }()
 			}
+			return nil
 		}),
 	)
 }
@@ -146,18 +144,18 @@ func (p *Pool) expiredWorkerCleaner() {
 
 		node := p.idleWorks.head
 		for node != nil {
-
 			if time.Now().Unix() > node.val.lastActiveAt.Unix()+1 {
 				if p.idleWorks.head != p.idleWorks.tail {
-					if node == p.idleWorks.head {
+					switch node {
+					case p.idleWorks.head:
 						p.idleWorks.head.next.prev = nil
 						p.idleWorks.head = p.idleWorks.head.next
 
-					} else if node == p.idleWorks.tail {
+					case p.idleWorks.tail:
 						p.idleWorks.tail.prev.next = nil
 						p.idleWorks.tail = p.idleWorks.tail.prev
 
-					} else {
+					default:
 						node.next.prev = node.prev
 						node.prev.next = node.next
 					}
@@ -165,7 +163,6 @@ func (p *Pool) expiredWorkerCleaner() {
 					p.idleWorks.head = nil
 					p.idleWorks.tail = nil
 				}
-
 			}
 
 			node = node.next

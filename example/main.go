@@ -39,9 +39,9 @@ func main() {
 
 	for i := 0; i < 20000000; i++ {
 		go func() {
-			pool.Submit(agilepool.TaskFunc(func() {
+			pool.Submit(agilepool.TaskFunc(func() error {
 				time.Sleep(10 * time.Millisecond)
-
+				return nil
 			}))
 
 		}()

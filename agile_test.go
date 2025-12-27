@@ -1,6 +1,8 @@
 package agilepool_test
 
 import (
+	"errors"
+	"log"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -20,11 +22,12 @@ func TestAgilePoolWorkerCapacityLimit(t *testing.T) {
 
 		go func() {
 			agilePool.Submit(
-				agilepool.TaskFunc(func() {
+				agilepool.TaskFunc(func() error {
 					if int(agilePool.GetRunningWorkersNum()) > maxWorkerNum {
 						maxWorkerNum = int(agilePool.GetRunningWorkersNum())
 					}
 					time.Sleep(10 * time.Millisecond)
+					return nil
 				}),
 			)
 		}()
@@ -45,8 +48,9 @@ func TestAgilePoolWorkerCompletion(t *testing.T) {
 
 		go func() {
 			agilePool.Submit(
-				agilepool.TaskFunc(func() {
+				agilepool.TaskFunc(func() error {
 					atomic.AddInt64(&sum, int64(1))
+					return nil
 				}),
 			)
 		}()
@@ -69,9 +73,10 @@ func TestAgilePoolSubmitBeforeCompletion(t *testing.T) {
 
 		go func() {
 			agilePool.SubmitBefore(
-				agilepool.TaskFunc(func() {
+				agilepool.TaskFunc(func() error {
 					time.Sleep(10 * time.Millisecond)
 					atomic.AddInt64(&sum, int64(1))
+					return nil
 				}), 10*time.Second,
 			)
 		}()
@@ -80,4 +85,26 @@ func TestAgilePoolSubmitBeforeCompletion(t *testing.T) {
 
 	agilePool.Wait()
 	assert.Equal(t, sum, int64(1000000))
+}
+
+func TestAgilePoolTaskRetryTimes(t *testing.T) {
+	var times int64 = 0
+
+	agilePool := agilepool.NewPool()
+	agilePool.InitConfig().WithWorkerNumCapacity(10)
+	agilePool.Init()
+
+	agilePool.Submit(&agilepool.TaskWithRetry{
+		MinBackOff: 1 * time.Second,
+		MaxBackOff: 200 * time.Second,
+		AttemptNum: 3,
+		Task: func() error {
+			times++
+			log.Println("getting err over here")
+			return errors.New("err")
+		},
+	})
+
+	agilePool.Wait()
+	assert.Equal(t, times, int64(4))
 }
