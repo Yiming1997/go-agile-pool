@@ -26,7 +26,7 @@ go get github.com/Yiming1997/go-agile-pool
 		go func() {
 			pool.Submit(agilepool.TaskFunc(func() {
 				time.Sleep(10 * time.Millisecond)
-
+				return nil
 			}))
 
 		}()
@@ -37,9 +37,12 @@ go get github.com/Yiming1997/go-agile-pool
 
 **Pool.SubmitBefore()**    
 ```go
-	pool.SubmitBefore(func() {
-		time.Sleep(10 * time.Millisecond)
-	}, 5*time.Second)
+	agilePool.SubmitBefore(
+				agilepool.TaskFunc(func() error {
+					time.Sleep(10 * time.Millisecond)
+					return nil
+				}), 10*time.Second,
+			)
 
 ```
 **benchmark**    
