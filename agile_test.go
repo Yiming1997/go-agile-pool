@@ -1,6 +1,8 @@
 package agilepool_test
 
 import (
+	"errors"
+	"log"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -83,4 +85,26 @@ func TestAgilePoolSubmitBeforeCompletion(t *testing.T) {
 
 	agilePool.Wait()
 	assert.Equal(t, sum, int64(1000000))
+}
+
+func TestAgilePoolTaskRetryTimes(t *testing.T) {
+	var times int64 = 0
+
+	agilePool := agilepool.NewPool()
+	agilePool.InitConfig().WithWorkerNumCapacity(10)
+	agilePool.Init()
+
+	agilePool.Submit(&agilepool.TaskWithRetry{
+		MinBackOff: 1 * time.Second,
+		MaxBackOff: 200 * time.Second,
+		AttemptNum: 3,
+		Task: func() error {
+			times++
+			log.Println("getting err over here")
+			return errors.New("err")
+		},
+	})
+
+	agilePool.Wait()
+	assert.Equal(t, times, int64(4))
 }
