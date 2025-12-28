@@ -97,7 +97,7 @@ func TestAgilePoolTaskRetryTimes(t *testing.T) {
 	agilePool.Submit(&agilepool.TaskWithRetry{
 		MinBackOff: 1 * time.Second,
 		MaxBackOff: 200 * time.Second,
-		AttemptNum: 3,
+		RetryNum:   3,
 		Task: func() error {
 			times++
 			log.Println("getting err over here")

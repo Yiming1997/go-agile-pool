@@ -18,8 +18,8 @@ func (tf TaskFunc) Process() {
 type TaskWithRetry struct {
 	MinBackOff      time.Duration
 	MaxBackOff      time.Duration
-	AttemptNum      uint
-	BackOffStrategy func(min, max time.Duration, attemptNum uint) time.Duration
+	RetryNum        uint
+	BackOffStrategy func(min, max time.Duration, retryNum uint) time.Duration
 	Task            func() error
 }
 
@@ -30,7 +30,7 @@ func (t *TaskWithRetry) Process() {
 }
 
 func (t *TaskWithRetry) runBackOffStrategy() {
-	for i := 1; i <= int(t.AttemptNum); i++ {
+	for i := 1; i <= int(t.RetryNum); i++ {
 		backOffTime := t.getBackOffTime(uint(i))
 		time.Sleep(backOffTime)
 		if t.Task() != nil {
@@ -40,16 +40,16 @@ func (t *TaskWithRetry) runBackOffStrategy() {
 	}
 }
 
-func (t *TaskWithRetry) getBackOffTime(attemptNum uint) time.Duration {
+func (t *TaskWithRetry) getBackOffTime(retryNum uint) time.Duration {
 	if t.BackOffStrategy != nil {
-		return t.BackOffStrategy(t.MinBackOff, t.MaxBackOff, t.AttemptNum)
+		return t.BackOffStrategy(t.MinBackOff, t.MaxBackOff, t.RetryNum)
 	}
 
-	return defaultBackOffStrategy(t.MinBackOff, t.MaxBackOff, attemptNum)
+	return defaultBackOffStrategy(t.MinBackOff, t.MaxBackOff, retryNum)
 }
 
-func defaultBackOffStrategy(min, max time.Duration, attemptNum uint) time.Duration {
-	mult := math.Pow(2, float64(attemptNum)) * float64(min)
+func defaultBackOffStrategy(min, max time.Duration, retryNum uint) time.Duration {
+	mult := math.Pow(2, float64(retryNum)) * float64(min)
 	sleep := time.Duration(mult)
 	if float64(sleep) != mult || sleep > max {
 		sleep = max
