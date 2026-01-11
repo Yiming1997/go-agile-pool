@@ -50,10 +50,10 @@ func (linkedList *LinkedList[T]) Pop() (val T) {
 	return val
 }
 
-func (linkedListp *LinkedList[T]) AddLength(num int64) {
-	atomic.AddInt64(&linkedListp.length, num)
+func (linkedList *LinkedList[T]) AddLength(num int64) {
+	atomic.AddInt64(&linkedList.length, num)
 }
 
-func (linkedListp *LinkedList[T]) GetLength(num int64) int64 {
-	return atomic.LoadInt64(&linkedListp.length)
+func (linkedList *LinkedList[T]) GetLength(num int64) int64 {
+	return atomic.LoadInt64(&linkedList.length)
 }
