@@ -6,6 +6,7 @@ goAgilePool is a lightweight goroutine pool for Golang, designed for simplicity 
 3. Task timeout control
 4. Automatic cleanup of idle workers upon timeout
 5. Efficient worker reuse through FIFO worker queue management
+6. Task with retry times
 
 ## Installation
 go get github.com/Yiming1997/go-agile-pool
@@ -47,6 +48,20 @@ go-agile-pool allows us to submit a task that must be executed before a specifie
 				}), 10*time.Second,
 			)
 
+```
+**TaskWithRetry**  
+go-agile-pool allows us to submit a task with a retry count. The task will be retried automatically if it encounters an error.
+```go
+agilePool.Submit(&agilepool.TaskWithRetry{
+		MinBackOff: 1 * time.Second,
+		MaxBackOff: 200 * time.Second,
+		RetryNum:   3,
+		Task: func() error {
+			times++
+			log.Println("getting err over here")
+			return errors.New("err")
+		},
+	})
 ```
 
 **benchmark**   
