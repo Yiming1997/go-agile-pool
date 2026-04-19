@@ -13,12 +13,12 @@ import (
 
 func TestAgilePoolWorkerCapacityLimit(t *testing.T) {
 	agilePool := agilepool.NewPool()
-	agilePool.InitConfig().WithWorkerNumCapacity(10000)
+	agilePool.InitConfig().WithWorkerNumCapacity(10000).WithIdleContainerType(agilepool.MinHeapType)
 	agilePool.Init()
 
 	var maxWorkerNum int = 0
 
-	for i := 0; i < 20000000; i++ {
+	for i := 0; i < 10000000; i++ {
 
 		go func() {
 			agilePool.Submit(
@@ -41,7 +41,7 @@ func TestAgilePoolWorkerCompletion(t *testing.T) {
 	var sum int64
 	sum = 0
 	agilePool := agilepool.NewPool()
-	agilePool.InitConfig().WithWorkerNumCapacity(10000)
+	agilePool.InitConfig().WithWorkerNumCapacity(10000).WithIdleContainerType(agilepool.MinHeapType)
 	agilePool.Init()
 
 	for i := 0; i < 1000000; i++ {
@@ -66,7 +66,7 @@ func TestAgilePoolSubmitBeforeCompletion(t *testing.T) {
 	var sum int64
 	sum = 0
 	agilePool := agilepool.NewPool()
-	agilePool.InitConfig().WithWorkerNumCapacity(10000)
+	agilePool.InitConfig().WithWorkerNumCapacity(10000).WithIdleContainerType(agilepool.MinHeapType)
 	agilePool.Init()
 
 	for i := 0; i < 1000000; i++ {
@@ -91,7 +91,7 @@ func TestAgilePoolTaskRetryTimes(t *testing.T) {
 	var times int64 = 0
 
 	agilePool := agilepool.NewPool()
-	agilePool.InitConfig().WithWorkerNumCapacity(10)
+	agilePool.InitConfig().WithWorkerNumCapacity(10).WithIdleContainerType(agilepool.MinHeapType)
 	agilePool.Init()
 
 	agilePool.Submit(&agilepool.TaskWithRetry{

@@ -7,6 +7,7 @@ type Config struct {
 	taskQueueSize     int64
 	workerNumCapacity int64
 	workMode          WorkMode
+	idleContainerType IdleContainerType
 }
 
 func (c *Config) WithCleanPeriod(timeDuration time.Duration) *Config {
@@ -26,5 +27,10 @@ func (c *Config) WithWorkerNumCapacity(workerNumCapacity int64) *Config {
 
 func (c *Config) WithBlockMode(workMode WorkMode) *Config {
 	c.workMode = workMode
+	return c
+}
+
+func (c *Config) WithIdleContainerType(containerType IdleContainerType) *Config {
+	c.idleContainerType = containerType
 	return c
 }

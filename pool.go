@@ -14,6 +14,7 @@ const (
 	DefaultTaskQueueSize        = 10000
 	DefaultMaxWorkerNumCapacity = math.MaxInt64
 	DefaultWorkMode             = BLOCK
+	DefaultIdleContainerType    = LinkedListType
 )
 
 type WorkMode int8
@@ -30,7 +31,7 @@ type Pool struct {
 	runningWorkersNum int64
 	muIdle            sync.Mutex
 	workerPool        sync.Pool // Worker object pool
-	idleWorks         *LinkedList[*worker]
+	idleWorks         IdleWorkerContainer
 	config            *Config
 	lock              sync.Locker
 	wg                sync.WaitGroup
@@ -39,7 +40,6 @@ type Pool struct {
 func NewPool() *Pool {
 	p := &Pool{
 		closePoolCn: make(chan struct{}),
-		idleWorks:   newLinkedList[*worker](),
 		config:      &Config{},
 		lock:        &sync.Mutex{},
 	}
@@ -74,6 +74,12 @@ func (p *Pool) Init() {
 
 	if p.config.workMode == 0 {
 		p.config.workMode = DefaultWorkMode
+	}
+
+	if p.config.idleContainerType == MinHeapType {
+		p.idleWorks = newMinHeap()
+	} else {
+		p.idleWorks = newLinkedList()
 	}
 
 	p.capacity = p.config.workerNumCapacity
@@ -141,34 +147,7 @@ func (p *Pool) expiredWorkerCleaner() {
 
 	for range ticker.C {
 		p.muIdle.Lock()
-
-		node := p.idleWorks.head
-		for node != nil {
-			if time.Now().Unix() > node.val.lastActiveAt.Unix()+1 {
-				if p.idleWorks.head != p.idleWorks.tail {
-					switch node {
-					case p.idleWorks.head:
-						p.idleWorks.head.next.prev = nil
-						p.idleWorks.head = p.idleWorks.head.next
-
-					case p.idleWorks.tail:
-						p.idleWorks.tail.prev.next = nil
-						p.idleWorks.tail = p.idleWorks.tail.prev
-
-					default:
-						node.next.prev = node.prev
-						node.prev.next = node.next
-					}
-				} else {
-					p.idleWorks.head = nil
-					p.idleWorks.tail = nil
-				}
-			}
-
-			node = node.next
-
-		}
-
+		p.idleWorks.RemoveExpired(time.Now(), 1*time.Second)
 		p.muIdle.Unlock()
 		runtime.Gosched()
 	}

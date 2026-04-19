@@ -1,59 +1,103 @@
 package agilepool
 
-import "sync/atomic"
+import (
+	"sync/atomic"
+	"time"
+)
 
-type LinkedList[T any] struct {
-	head   *node[T]
-	tail   *node[T]
+// LinkedList implements IdleWorkerContainer using a doubly linked list (FIFO).
+type LinkedList struct {
+	head   *llNode
+	tail   *llNode
 	length int64
 }
 
-type node[T any] struct {
-	val  T
-	next *node[T]
-	prev *node[T]
+type llNode struct {
+	val  *worker
+	next *llNode
+	prev *llNode
 }
 
-func newNode[T any](val T) *node[T] {
-	return &node[T]{
+func newLLNode(val *worker) *llNode {
+	return &llNode{
 		val: val,
 	}
 }
 
-func newLinkedList[T any]() *LinkedList[T] {
-	return &LinkedList[T]{}
+func newLinkedList() *LinkedList {
+	return &LinkedList{}
 }
 
-func (linkedList *LinkedList[T]) Add(val T) {
-	node := newNode(val)
-	if linkedList.head == nil && linkedList.tail == nil {
-		linkedList.head = node
-		linkedList.tail = node
+// Add adds a worker to the tail of the linked list.
+func (ll *LinkedList) Add(w *worker) {
+	node := newLLNode(w)
+	if ll.head == nil && ll.tail == nil {
+		ll.head = node
+		ll.tail = node
+		atomic.AddInt64(&ll.length, 1)
 		return
 	}
-	prev := linkedList.tail
-	linkedList.tail.next = node
-	linkedList.tail = linkedList.tail.next
-	linkedList.tail.prev = prev
+	prev := ll.tail
+	ll.tail.next = node
+	ll.tail = ll.tail.next
+	ll.tail.prev = prev
+	atomic.AddInt64(&ll.length, 1)
 }
 
-func (linkedList *LinkedList[T]) Pop() (val T) {
-	if linkedList.head == nil {
-		return
+// Pop removes and returns the worker at the head of the linked list.
+// Returns nil if the list is empty.
+func (ll *LinkedList) Pop() *worker {
+	if ll.head == nil {
+		return nil
 	}
-	val = linkedList.head.val
-	if linkedList.head == linkedList.tail {
-		linkedList.head, linkedList.tail = nil, nil
+	val := ll.head.val
+	if ll.head == ll.tail {
+		ll.head, ll.tail = nil, nil
 	} else {
-		linkedList.head = linkedList.head.next
+		ll.head = ll.head.next
+		ll.head.prev = nil
 	}
+	atomic.AddInt64(&ll.length, -1)
 	return val
 }
 
-func (linkedList *LinkedList[T]) AddLength(num int64) {
-	atomic.AddInt64(&linkedList.length, num)
+// RemoveExpired removes all workers whose lastActiveAt + expiry <= now.
+// The linked list is FIFO by insertion order, but lastActiveAt is not monotonic
+// with insertion order (a worker finishing a long task may have a newer lastActiveAt
+// than a worker inserted after it). Therefore, a full traversal is required.
+func (ll *LinkedList) RemoveExpired(now time.Time, expiry time.Duration) int {
+	removed := 0
+	node := ll.head
+	for node != nil {
+		next := node.next // save next before potential removal
+		if !node.val.lastActiveAt.Add(expiry).After(now) {
+			// Worker is expired, remove this node
+			ll.removeNode(node)
+			removed++
+		}
+		node = next
+	}
+	return removed
 }
 
-func (linkedList *LinkedList[T]) GetLength(num int64) int64 {
-	return atomic.LoadInt64(&linkedList.length)
+// removeNode removes the given node from the linked list.
+func (ll *LinkedList) removeNode(node *llNode) {
+	if node.prev != nil {
+		node.prev.next = node.next
+	} else {
+		ll.head = node.next
+	}
+	if node.next != nil {
+		node.next.prev = node.prev
+	} else {
+		ll.tail = node.prev
+	}
+	node.prev = nil
+	node.next = nil
+	atomic.AddInt64(&ll.length, -1)
+}
+
+// Len returns the number of workers in the linked list.
+func (ll *LinkedList) Len() int64 {
+	return atomic.LoadInt64(&ll.length)
 }

@@ -14,7 +14,7 @@ const (
 func BenchmarkAgilePool(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		pool := agilepool.NewPool()
-		pool.InitConfig().WithCleanPeriod(500 * time.Millisecond).WithTaskQueueSize(10000).WithWorkerNumCapacity(20000)
+		pool.InitConfig().WithCleanPeriod(500 * time.Millisecond).WithTaskQueueSize(10000).WithWorkerNumCapacity(50000).WithIdleContainerType(agilepool.MinHeapType)
 		pool.Init()
 
 		for j := 0; j < taskCount; j++ {
@@ -25,7 +25,6 @@ func BenchmarkAgilePool(b *testing.B) {
 				}))
 
 			}()
-
 		}
 		pool.Wait()
 		pool.Close()

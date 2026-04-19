@@ -33,7 +33,8 @@ func main() {
 	pool.InitConfig().
 		WithCleanPeriod(500 * time.Millisecond).
 		WithTaskQueueSize(10000).
-		WithWorkerNumCapacity(20000)
+		WithWorkerNumCapacity(20000).
+		WithIdleContainerType(agilepool.LinkedListType)
 
 	pool.Init()
 
