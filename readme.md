@@ -5,7 +5,7 @@ goAgilePool is a lightweight goroutine pool for Golang, designed for simplicity 
 2. Configurable task queue size
 3. Task timeout control
 4. Automatic cleanup of idle workers upon timeout
-5. Efficient worker reuse through FIFO worker queue management
+5. Configurable idle worker container (LinkedList / MinHeap)
 6. Task with retry times
 
 ## Installation
@@ -63,6 +63,22 @@ agilePool.Submit(&agilepool.TaskWithRetry{
 		},
 	})
 ```
+
+**IdleWorkerContainer**  
+go-agile-pool supports pluggable idle worker container implementations. You can choose between `LinkedList` (default, FIFO) and `MinHeap` (ordered by `lastActiveAt`) to manage idle workers, depending on your scenario.
+
+```go
+pool := agilepool.NewPool()
+pool.InitConfig().
+    WithIdleContainerType(agilepool.MinHeapType).
+    WithWorkerNumCapacity(20000)
+pool.Init()
+```
+
+| Container | Ordered By | Pop | RemoveExpired | Use Case |
+|-----------|-----------|-----|---------------|----------|
+| `LinkedListType` (default) | Insertion time (FIFO) | First added worker | Full traversal O(n) | General purpose, simple FIFO reuse |
+| `MinHeapType` | `lastActiveAt` | Least recently active worker | Early termination O(k log n) | Efficient expiration cleanup |
 
 **benchmark**   
 Run this benchmark test，and we will see how fast the pool processes its tasks.
