@@ -2,6 +2,7 @@ package agilepool
 
 import (
 	"context"
+	"log"
 	"math"
 	"runtime"
 	"sync"
@@ -24,6 +25,14 @@ const (
 	NONBLOCK
 )
 
+// Logger defines the logging interface used by the pool.
+// Both the standard library's *log.Logger and structured loggers
+// (e.g. zap.SugaredLogger) satisfy this interface.
+type Logger interface {
+	Printf(format string, v ...interface{})
+	Println(v ...interface{})
+}
+
 type Pool struct {
 	taskQueue         chan Task
 	closePoolCn       chan struct{}
@@ -35,6 +44,7 @@ type Pool struct {
 	config            *Config
 	lock              sync.Locker
 	wg                sync.WaitGroup
+	logger            Logger
 }
 
 func NewPool() *Pool {
@@ -42,6 +52,7 @@ func NewPool() *Pool {
 		closePoolCn: make(chan struct{}),
 		config:      &Config{},
 		lock:        &sync.Mutex{},
+		logger:      log.Default(),
 	}
 
 	p.workerPool.New = func() interface{} {
@@ -56,6 +67,13 @@ func NewPool() *Pool {
 
 func (p *Pool) InitConfig() (config *Config) {
 	return p.config
+}
+
+// SetLogger replaces the default standard-library logger.
+// Pass the same logger instance used elsewhere in your application
+// (e.g. zap.SugaredLogger) so pool output appears in the same log stream.
+func (p *Pool) SetLogger(l Logger) {
+	p.logger = l
 }
 
 func (p *Pool) Init() {
