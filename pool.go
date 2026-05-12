@@ -1,10 +1,8 @@
 package agilepool
 
 import (
-	"context"
 	"log"
 	"math"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,6 +14,7 @@ const (
 	DefaultMaxWorkerNumCapacity = math.MaxInt64
 	DefaultWorkMode             = BLOCK
 	DefaultIdleContainerType    = LinkedListType
+	DefaultExpiryDuration       = 1 * time.Second
 )
 
 type WorkMode int8
@@ -35,24 +34,19 @@ type Logger interface {
 
 type Pool struct {
 	taskQueue         chan Task
-	closePoolCn       chan struct{}
 	capacity          int64 // The maximum number of workers in the pool.
 	runningWorkersNum int64
-	muIdle            sync.Mutex
 	workerPool        sync.Pool // Worker object pool
-	idleWorks         IdleWorkerContainer
 	config            *Config
-	lock              sync.Locker
 	wg                sync.WaitGroup
 	logger            Logger
+	closed            atomic.Bool
 }
 
 func NewPool() *Pool {
 	p := &Pool{
-		closePoolCn: make(chan struct{}),
-		config:      &Config{},
-		lock:        &sync.Mutex{},
-		logger:      log.Default(),
+		config: &Config{},
+		logger: log.Default(),
 	}
 
 	p.workerPool.New = func() interface{} {
@@ -94,93 +88,98 @@ func (p *Pool) Init() {
 		p.config.workMode = DefaultWorkMode
 	}
 
-	if p.config.idleContainerType == MinHeapType {
-		p.idleWorks = newMinHeap()
-	} else {
-		p.idleWorks = newLinkedList()
+	if p.config.expiryDuration == 0 {
+		p.config.expiryDuration = DefaultExpiryDuration
 	}
 
 	p.capacity = p.config.workerNumCapacity
 	p.taskQueue = make(chan Task, p.config.taskQueueSize)
-
-	go p.expiredWorkerCleaner()
 }
 
+// Submit submits a task to the pool. In BLOCK mode it blocks until the task
+// is enqueued; in NONBLOCK mode the task is silently dropped if the pool is full.
+// Uses CAS (lock-free) for the worker-capacity check to avoid mutex contention
+// under high concurrency.
 func (p *Pool) Submit(task Task) {
 	p.wg.Add(1)
-	p.lock.Lock()
 
-	if atomic.LoadInt64(&p.runningWorkersNum) < p.capacity {
-		p.addRunningWorkersNum(1)
-		p.lock.Unlock()
-		p.muIdle.Lock()
-		w := p.idleWorks.Pop()
-		p.muIdle.Unlock()
-		if w != nil {
-			go w.run(task)
-		} else {
-			w := p.workerPool.Get().(*worker)
-			go w.run(task)
-		}
+	if p.closed.Load() {
+		p.wg.Done()
 		return
 	}
-	p.lock.Unlock()
+
+	// Lock-free capacity check via CAS loop.
+	for {
+		current := atomic.LoadInt64(&p.runningWorkersNum)
+		if current >= p.capacity {
+			break // At capacity, enqueue via channel.
+		}
+		if atomic.CompareAndSwapInt64(&p.runningWorkersNum, current, current+1) {
+			w := p.workerPool.Get().(*worker)
+			go w.run(task)
+			return
+		}
+		// CAS failed — another goroutine took the slot; retry.
+	}
+
 	if p.config.workMode == NONBLOCK {
 		p.wg.Done()
 		return
 	}
 
 	p.taskQueue <- task
-
 }
 
-func (p *Pool) SubmitBefore(task Task, time time.Duration) {
-	ctx, cancel := context.WithTimeout(context.Background(), time)
-	p.Submit(
-		TaskFunc(func() error {
-			select {
-			case <-ctx.Done():
-				cancel()
-			default:
-				task.Process()
-			}
-			return nil
-		}),
-	)
-}
+// SubmitBefore submits a task with a deadline. If the task cannot be enqueued
+// (because all workers are busy and the task queue is full) within the given
+// duration, the task is dropped and WaitGroup is decremented.
+func (p *Pool) SubmitBefore(task Task, timeout time.Duration) {
+	p.wg.Add(1)
 
-func (p *Pool) addToIdle(w *worker) {
-	p.muIdle.Lock()
-	defer p.muIdle.Unlock()
-	p.idleWorks.Add(w)
+	if p.closed.Load() {
+		p.wg.Done()
+		return
+	}
+
+	for {
+		current := atomic.LoadInt64(&p.runningWorkersNum)
+		if current >= p.capacity {
+			break
+		}
+		if atomic.CompareAndSwapInt64(&p.runningWorkersNum, current, current+1) {
+			w := p.workerPool.Get().(*worker)
+			go w.run(task)
+			return
+		}
+	}
+
+	if p.config.workMode == NONBLOCK {
+		p.wg.Done()
+		return
+	}
+
+	select {
+	case p.taskQueue <- task:
+	case <-time.After(timeout):
+		p.wg.Done()
+	}
 }
 
 func (p *Pool) addRunningWorkersNum(num int64) {
 	atomic.AddInt64(&p.runningWorkersNum, num)
 }
 
-func (p *Pool) expiredWorkerCleaner() {
-	ticker := time.NewTicker(p.config.cleanPeriod)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		p.muIdle.Lock()
-		p.idleWorks.RemoveExpired(time.Now(), 1*time.Second)
-		p.muIdle.Unlock()
-		runtime.Gosched()
-	}
-}
-
+// Close gracefully shuts down the pool: waits for all submitted tasks to
+// complete, then closes the task queue so workers exit their loops.
 func (p *Pool) Close() {
-	close(p.closePoolCn)
+	p.closed.Store(true)
+	p.wg.Wait()
+	close(p.taskQueue)
 }
 
+// Wait blocks until all submitted tasks have completed.
 func (p *Pool) Wait() {
 	p.wg.Wait()
-}
-
-func (p *Pool) Done() {
-	p.wg.Done()
 }
 
 func (p *Pool) GetRunningWorkersNum() int64 {
