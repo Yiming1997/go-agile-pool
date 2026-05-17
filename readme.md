@@ -80,38 +80,26 @@ pool.Init()
 | `LinkedListType` (default) | Insertion time (FIFO) | First added worker | Full traversal O(n) | General purpose, simple FIFO reuse |
 | `MinHeapType` | `lastActiveAt` | Least recently active worker | Early termination O(k log n) | Efficient expiration cleanup |
 
-**benchmark**   
-Run this benchmark test，and we will see how fast the pool processes its tasks.
-```go
+**Benchmark**   
+The benchmark suite measures pool throughput under four scenarios, crossing two dimensions:
+- **Submit style**: concurrent (`go func`) vs sequential (direct call)
+- **Idle container**: `MinHeap` (ordered by `lastActiveAt`) vs `LinkedList` (FIFO)
 
-const (
-	taskCount = 10000000
-)
+Each benchmark submits 10 million tasks (each `time.Sleep(10ms)`) and waits for completion.
 
-
-func BenchmarkAgilePool(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		pool := agilepool.NewPool()
-		pool.InitConfig().WithCleanPeriod(500 * time.Millisecond).WithTaskQueueSize(10000).WithWorkerNumCapacity(20000)
-		pool.Init()
-
-		for j := 0; j < taskCount; j++ {
-			go func() {
-				pool.Submit(agilepool.TaskFunc(func() error {
-					time.Sleep(10 * time.Millisecond)
-					return nil
-				}))
-
-			}()
-
-		}
-		pool.Wait()
-		pool.Close()
-	}
-}
-
+Run all benchmarks:
+```bash
+go test -bench=. -benchtime=1x -timeout=2h -run=^$ -count=1
 ```
 
+Run a single variant:
+```bash
+go test -bench=BenchmarkAgilePoolMinHeap -benchtime=1x -timeout=2h -run=^$ -count=1
 ```
-BenchmarkAgilePool-14    	       1	5881506800 ns/op	230601408 B/op	10871762 allocs/op
-```
+
+| Benchmark | Submit | Idle Container |
+|---|---|---|
+| `BenchmarkAgilePoolMinHeap` | concurrent (`go func`) | `MinHeapType` |
+| `BenchmarkAgilePoolLinkedList` | concurrent (`go func`) | `LinkedListType` |
+| `BenchmarkAgilePoolSequentialMinHeap` | sequential | `MinHeapType` |
+| `BenchmarkAgilePoolSequentialLinkedList` | sequential | `LinkedListType` |
