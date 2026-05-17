@@ -42,7 +42,7 @@ type Pool struct {
 	workerPool        sync.Pool // Worker object pool
 	idleWorks         IdleWorkerContainer
 	config            *Config
-	lock              sync.Locker
+	lock              *sync.Mutex
 	wg                sync.WaitGroup
 	logger            Logger
 }
