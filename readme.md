@@ -81,6 +81,8 @@ pool.Init()
 | `MinHeapType` | `lastActiveAt` | Least recently active worker | Early termination O(k log n) | Efficient expiration cleanup |
 
 **Benchmark**   
+> **Note:** 20k (20000) worker capacity gives the best performance.
+
 The benchmark suite measures pool throughput under four scenarios, crossing two dimensions:
 - **Submit style**: concurrent (`go func`) vs sequential (direct call)
 - **Idle container**: `MinHeap` (ordered by `lastActiveAt`) vs `LinkedList` (FIFO)
