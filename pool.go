@@ -132,6 +132,27 @@ func (p *Pool) Submit(task Task) {
 
 	p.taskQueue <- task
 
+	// Safety net: if workers exited between our capacity check and the push
+	// above, tasks could be stranded in the channel buffer with no consumer.
+	// Re-check under lock and spawn enough workers to drain the queue, up to
+	// capacity. See TestQueueStuckRace for the race this guards against.
+	p.lock.Lock()
+	running := atomic.LoadInt64(&p.runningWorkersNum)
+	target := int64(len(p.taskQueue))
+	if target > p.capacity {
+		target = p.capacity
+	}
+	toSpawn := target - running
+	if toSpawn > 0 {
+		p.addRunningWorkersNum(toSpawn)
+		p.lock.Unlock()
+		for i := int64(0); i < toSpawn; i++ {
+			w := p.workerPool.Get().(*worker)
+			go w.run(nil)
+		}
+		return
+	}
+	p.lock.Unlock()
 }
 
 func (p *Pool) SubmitBefore(task Task, time time.Duration) {
