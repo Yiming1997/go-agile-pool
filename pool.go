@@ -38,6 +38,7 @@ type Pool struct {
 	closePoolCn       chan struct{}
 	capacity          int64 // The maximum number of workers in the pool.
 	runningWorkersNum int64
+	closed            int32 // 1 once Close has been called, otherwise 0
 	muIdle            sync.Mutex
 	workerPool        sync.Pool // Worker object pool
 	idleWorks         IdleWorkerContainer
@@ -107,6 +108,12 @@ func (p *Pool) Init() {
 }
 
 func (p *Pool) Submit(task Task) {
+	// Reject new submissions once Close has been called. We check before
+	// wg.Add so that a closed pool's Wait() can still return promptly for
+	// in-flight tasks and is not blocked by post-close submissions.
+	if atomic.LoadInt32(&p.closed) == 1 {
+		return
+	}
 	p.wg.Add(1)
 	p.lock.Lock()
 
@@ -184,15 +191,31 @@ func (p *Pool) expiredWorkerCleaner() {
 	ticker := time.NewTicker(p.config.cleanPeriod)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		p.muIdle.Lock()
-		p.idleWorks.RemoveExpired(time.Now(), 1*time.Second)
-		p.muIdle.Unlock()
-		runtime.Gosched()
+	for {
+		select {
+		case <-ticker.C:
+			p.muIdle.Lock()
+			p.idleWorks.RemoveExpired(time.Now(), 1*time.Second)
+			p.muIdle.Unlock()
+			runtime.Gosched()
+		case <-p.closePoolCn:
+			return
+		}
 	}
 }
 
+// Close marks the pool as closed and stops its background cleaner goroutine.
+// After Close:
+//   - new Submit calls become no-ops (the task is dropped, no goroutine is started)
+//   - in-flight tasks already submitted continue to run to completion
+//   - Wait() returns once all in-flight tasks are done, enabling graceful shutdown
+//
+// Close is idempotent and safe to call from any goroutine, including from
+// within a running task.
 func (p *Pool) Close() {
+	if !atomic.CompareAndSwapInt32(&p.closed, 0, 1) {
+		return
+	}
 	close(p.closePoolCn)
 }
 
