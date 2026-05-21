@@ -22,7 +22,13 @@ func (w *worker) run(task Task) {
 		w.runTask(task)
 	}
 
-	defer w.pool.workerPool.Put(w)
+	// NOTE: workerPool.Put(w) is intentionally called only on the "terminal"
+	// exit paths (queue closed / nil task) below, NOT in a defer. Putting w to
+	// the sync.Pool when the worker has just been added to idleWorks would
+	// place the same *worker pointer in two containers at once; subsequent
+	// Submits could then concurrently spawn two goroutines on the same
+	// *worker via Pop and workerPool.Get respectively, causing a data race
+	// on w.lastActiveAt and phantom duplicates in idleWorks.
 
 loop:
 	for {
@@ -31,12 +37,14 @@ loop:
 			if !ok {
 				w.pool.logger.Println("taskQueue closed,exiting")
 				w.pool.addRunningWorkersNum(-1)
+				w.pool.workerPool.Put(w)
 				return
 			}
 
 			if task == nil {
 				w.pool.logger.Println("nil task received, exiting")
 				w.pool.addRunningWorkersNum(-1)
+				w.pool.workerPool.Put(w)
 				return
 			}
 			w.lastActiveAt = time.Now()
@@ -54,16 +62,20 @@ loop:
 				if !ok {
 					w.pool.logger.Println("taskQueue closed,exiting")
 					w.pool.addRunningWorkersNum(-1)
+					w.pool.workerPool.Put(w)
 					return
 				}
 				if task == nil {
 					w.pool.logger.Println("nil task received, exiting")
 					w.pool.addRunningWorkersNum(-1)
+					w.pool.workerPool.Put(w)
 					return
 				}
 				w.lastActiveAt = time.Now()
 				w.runTask(task)
 			default:
+				// w is being parked in idleWorks; do NOT also put it in
+				// workerPool.sync.Pool — see the note at the top of run().
 				w.pool.addToIdle(w)
 				w.pool.addRunningWorkersNum(-1)
 				w.pool.lock.Unlock()
