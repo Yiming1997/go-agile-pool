@@ -91,6 +91,6 @@ func (w *worker) runTask(task Task) {
 			w.pool.logger.Printf("worker exits from panic: %v\n%s\n", p, debug.Stack())
 		}
 	}()
-	defer w.pool.wg.Done()
+	defer w.pool.done()
 	task.Process()
 }
