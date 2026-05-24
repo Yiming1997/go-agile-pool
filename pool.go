@@ -162,15 +162,17 @@ func (p *Pool) Submit(task Task) {
 	p.lock.Unlock()
 }
 
-func (p *Pool) SubmitBefore(task Task, time time.Duration) {
-	ctx, cancel := context.WithTimeout(context.Background(), time)
+// Submits a task before the specified timeout. If timeout is reached during execution, the task is canceled.
+func (p *Pool) SubmitBefore(task Task, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	p.Submit(
 		TaskFunc(func() error {
+			defer cancel() // Ensures context is released after task completes to avoid resource leak
 			select {
 			case <-ctx.Done():
-				cancel()
+				return nil // Timeout reached, exit early
 			default:
-				task.Process()
+				task.Process() // Execute the task
 			}
 			return nil
 		}),
