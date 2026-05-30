@@ -1,6 +1,7 @@
 package agilepool_test
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -86,5 +87,23 @@ func BenchmarkAgilePoolSequentialLinkedList(b *testing.B) {
 		}
 		pool.Wait()
 		pool.Close()
+	}
+}
+
+func BenchmarkNativeGoroutine(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		var wg sync.WaitGroup
+		sem := make(chan struct{}, 20000)
+
+		for j := 0; j < taskCount; j++ {
+			wg.Add(1)
+			sem <- struct{}{}
+			go func() {
+				defer wg.Done()
+				defer func() { <-sem }()
+				time.Sleep(10 * time.Millisecond)
+			}()
+		}
+		wg.Wait()
 	}
 }
