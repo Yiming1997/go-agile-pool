@@ -14,20 +14,13 @@ go get github.com/Yiming1997/go-agile-pool
 ## Usage
 **Pool.Submit()**
 ```go
-    //Initialize a pool
-	pool := agilepool.NewPool()
+	//initialize a pool with default configuration
+	pool := agilepool.NewPool(agilepool.NewConfig())
 
-    //set pool configuration with chained calls
-	pool.InitConfig().
-		WithCleanPeriod(500 * time.Millisecond).
-		WithTaskQueueSize(10000).
-		WithWorkerNumCapacity(20000)
-
-	pool.Init()
 	//submit tasks
 	for i := 0; i < 20000000; i++ {
 		go func() {
-			pool.Submit(agilepool.TaskFunc(func() {
+			pool.Submit(agilepool.TaskFunc(func() error {
 				time.Sleep(10 * time.Millisecond)
 				return nil
 			}))
@@ -35,10 +28,20 @@ go get github.com/Yiming1997/go-agile-pool
 		}()
 	}
 	//wait for all tasks to be done
-	pool.Wait() 
+	pool.Wait()
 ```
 
-**Pool.SubmitBefore()**    
+**Custom Configuration**
+```go
+	//initialize a pool with custom configuration
+	pool := agilepool.NewPool(agilepool.NewConfig(
+		agilepool.WithCleanPeriod(500*time.Millisecond),
+		agilepool.WithTaskQueueSize(10000),
+		agilepool.WithWorkerNumCapacity(20000),
+	))
+```
+
+**Pool.SubmitBefore()**
 go-agile-pool allows us to submit a task that must be executed before a specified deadline,otherwise it will be canceled
 ```go
 	agilePool.SubmitBefore(
@@ -49,7 +52,7 @@ go-agile-pool allows us to submit a task that must be executed before a specifie
 			)
 
 ```
-**TaskWithRetry**  
+**TaskWithRetry**
 go-agile-pool allows us to submit a task with a retry count. The task will be retried automatically if it encounters an error.
 ```go
 agilePool.Submit(&agilepool.TaskWithRetry{
@@ -64,15 +67,14 @@ agilePool.Submit(&agilepool.TaskWithRetry{
 	})
 ```
 
-**IdleWorkerContainer**  
+**IdleWorkerContainer**
 go-agile-pool supports pluggable idle worker container implementations. You can choose between `LinkedList` (default, FIFO) and `MinHeap` (ordered by `lastActiveAt`) to manage idle workers, depending on your scenario.
 
 ```go
-pool := agilepool.NewPool()
-pool.InitConfig().
-    WithIdleContainerType(agilepool.MinHeapType).
-    WithWorkerNumCapacity(20000)
-pool.Init()
+pool := agilepool.NewPool(agilepool.NewConfig(
+	agilepool.WithIdleContainerType(agilepool.MinHeapType),
+	agilepool.WithWorkerNumCapacity(20000),
+))
 ```
 
 | Container | Ordered By | Pop | RemoveExpired | Use Case |
@@ -80,7 +82,7 @@ pool.Init()
 | `LinkedListType` (default) | Insertion time (FIFO) | First added worker | Full traversal O(n) | General purpose, simple FIFO reuse |
 | `MinHeapType` | `lastActiveAt` | Least recently active worker | Early termination O(k log n) | Efficient expiration cleanup |
 
-**Benchmark**   
+**Benchmark**
 > **Note:** 20k (20000) worker capacity gives the best performance.
 
 The benchmark suite measures pool throughput under four scenarios, crossing two dimensions:

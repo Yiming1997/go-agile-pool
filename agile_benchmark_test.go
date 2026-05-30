@@ -13,10 +13,14 @@ const (
 
 func BenchmarkAgilePoolMinHeap(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		pool := agilepool.NewPool()
 		// 20k worker capacity gives the best performance
-		pool.InitConfig().WithCleanPeriod(500 * time.Millisecond).WithTaskQueueSize(10000).WithWorkerNumCapacity(20000).WithIdleContainerType(agilepool.MinHeapType)
-		pool.Init()
+
+		pool := agilepool.NewPool(agilepool.NewConfig(
+			agilepool.WithCleanPeriod(500*time.Millisecond),
+			agilepool.WithTaskQueueSize(10000),
+			agilepool.WithWorkerNumCapacity(20000),
+			agilepool.WithIdleContainerType(agilepool.MinHeapType),
+		))
 
 		for j := 0; j < taskCount; j++ {
 			go func() {
@@ -34,10 +38,13 @@ func BenchmarkAgilePoolMinHeap(b *testing.B) {
 
 func BenchmarkAgilePoolLinkedList(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		pool := agilepool.NewPool()
 		// 20k worker capacity gives the best performance
-		pool.InitConfig().WithCleanPeriod(500 * time.Millisecond).WithTaskQueueSize(10000).WithWorkerNumCapacity(20000).WithIdleContainerType(agilepool.LinkedListType)
-		pool.Init()
+		pool := agilepool.NewPool(agilepool.NewConfig(
+			agilepool.WithCleanPeriod(500*time.Millisecond),
+			agilepool.WithTaskQueueSize(10000),
+			agilepool.WithWorkerNumCapacity(20000),
+			agilepool.WithIdleContainerType(agilepool.LinkedListType),
+		))
 
 		for j := 0; j < taskCount; j++ {
 			go func() {
@@ -55,10 +62,13 @@ func BenchmarkAgilePoolLinkedList(b *testing.B) {
 
 func BenchmarkAgilePoolSequentialMinHeap(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		pool := agilepool.NewPool()
 		// 20k worker capacity gives the best performance
-		pool.InitConfig().WithCleanPeriod(500 * time.Millisecond).WithTaskQueueSize(10000).WithWorkerNumCapacity(20000).WithIdleContainerType(agilepool.MinHeapType)
-		pool.Init()
+		pool := agilepool.NewPool(agilepool.NewConfig(
+			agilepool.WithCleanPeriod(500*time.Millisecond),
+			agilepool.WithTaskQueueSize(10000),
+			agilepool.WithWorkerNumCapacity(20000),
+			agilepool.WithIdleContainerType(agilepool.MinHeapType),
+		))
 
 		for j := 0; j < taskCount; j++ {
 			pool.Submit(agilepool.TaskFunc(func() error {
@@ -73,11 +83,13 @@ func BenchmarkAgilePoolSequentialMinHeap(b *testing.B) {
 
 func BenchmarkAgilePoolSequentialLinkedList(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		pool := agilepool.NewPool()
 		// 20k worker capacity gives the best performance
-		pool.InitConfig().WithCleanPeriod(500 * time.Millisecond).WithTaskQueueSize(10000).WithWorkerNumCapacity(20000).WithIdleContainerType(agilepool.LinkedListType)
-		pool.Init()
-
+		pool := agilepool.NewPool(agilepool.NewConfig(
+			agilepool.WithCleanPeriod(500*time.Millisecond),
+			agilepool.WithTaskQueueSize(10000),
+			agilepool.WithWorkerNumCapacity(20000),
+			agilepool.WithIdleContainerType(agilepool.LinkedListType),
+		))
 		for j := 0; j < taskCount; j++ {
 			pool.Submit(agilepool.TaskFunc(func() error {
 				time.Sleep(10 * time.Millisecond)
