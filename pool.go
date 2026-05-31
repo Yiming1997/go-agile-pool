@@ -46,6 +46,10 @@ type Pool struct {
 	lock              *sync.Mutex
 	wg                sync.WaitGroup
 	logger            Logger
+	// WorkerCreateCount counts the total allocations from sync.Pool.New
+	// over the current pool lifetime. It is reset to 0 on each Init() call.
+	// For the number of currently active workers, use GetRunningWorkersNum().
+	WorkerCreateCount int64
 }
 
 func NewPool() *Pool {
@@ -57,6 +61,7 @@ func NewPool() *Pool {
 	}
 
 	p.workerPool.New = func() interface{} {
+		atomic.AddInt64(&p.WorkerCreateCount, 1)
 		w := &worker{
 			pool: p,
 		}
@@ -103,6 +108,9 @@ func (p *Pool) Init() {
 
 	p.capacity = p.config.workerNumCapacity
 	p.taskQueue = make(chan Task, p.config.taskQueueSize)
+
+	// Reset cumulative counters for this pool lifetime.
+	atomic.StoreInt64(&p.WorkerCreateCount, 0)
 
 	go p.expiredWorkerCleaner()
 }
