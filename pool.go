@@ -11,11 +11,11 @@ import (
 )
 
 const (
-	DefaultCleanPeriod          = 100 * time.Millisecond
-	DefaultTaskQueueSize        = 10000
-	DefaultMaxWorkerNumCapacity = math.MaxInt64
-	DefaultWorkMode             = BLOCK
-	DefaultIdleContainerType    = LinkedListType
+	defaultCleanPeriod          = 100 * time.Millisecond
+	defaultTaskQueueSize        = 10000
+	defaultMaxWorkerNumCapacity = math.MaxInt64
+	defaultWorkMode             = BLOCK
+	defaultIdleContainerType    = LinkedListType
 )
 
 type WorkMode int8
@@ -48,12 +48,23 @@ type Pool struct {
 	logger            Logger
 }
 
-func NewPool() *Pool {
+func NewPool(c *Config) *Pool {
+	if c == nil {
+		c = NewConfig()
+	}
 	p := &Pool{
 		closePoolCn: make(chan struct{}),
-		config:      &Config{},
+		config:      c,
 		lock:        &sync.Mutex{},
 		logger:      log.Default(),
+		capacity:    c.workerNumCapacity,
+		taskQueue:   make(chan Task, c.taskQueueSize),
+	}
+
+	if c.idleContainerType == MinHeapType {
+		p.idleWorks = newMinHeap()
+	} else {
+		p.idleWorks = newLinkedList()
 	}
 
 	p.workerPool.New = func() interface{} {
@@ -63,11 +74,8 @@ func NewPool() *Pool {
 		return w
 	}
 
+	go p.expiredWorkerCleaner()
 	return p
-}
-
-func (p *Pool) InitConfig() (config *Config) {
-	return p.config
 }
 
 // SetLogger replaces the default standard-library logger.
@@ -75,36 +83,6 @@ func (p *Pool) InitConfig() (config *Config) {
 // (e.g. zap.SugaredLogger) so pool output appears in the same log stream.
 func (p *Pool) SetLogger(l Logger) {
 	p.logger = l
-}
-
-func (p *Pool) Init() {
-
-	if p.config.cleanPeriod == 0 {
-		p.config.cleanPeriod = DefaultCleanPeriod
-	}
-
-	if p.config.taskQueueSize == 0 {
-		p.config.taskQueueSize = DefaultTaskQueueSize
-	}
-
-	if p.config.workerNumCapacity == 0 {
-		p.config.workerNumCapacity = DefaultMaxWorkerNumCapacity
-	}
-
-	if p.config.workMode == 0 {
-		p.config.workMode = DefaultWorkMode
-	}
-
-	if p.config.idleContainerType == MinHeapType {
-		p.idleWorks = newMinHeap()
-	} else {
-		p.idleWorks = newLinkedList()
-	}
-
-	p.capacity = p.config.workerNumCapacity
-	p.taskQueue = make(chan Task, p.config.taskQueueSize)
-
-	go p.expiredWorkerCleaner()
 }
 
 func (p *Pool) Submit(task Task) {

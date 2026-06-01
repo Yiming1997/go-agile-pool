@@ -13,9 +13,10 @@ import (
 )
 
 func TestAgilePoolWorkerCapacityLimit(t *testing.T) {
-	agilePool := agilepool.NewPool()
-	agilePool.InitConfig().WithWorkerNumCapacity(10000).WithIdleContainerType(agilepool.MinHeapType)
-	agilePool.Init()
+	agilePool := agilepool.NewPool(agilepool.NewConfig(
+		agilepool.WithWorkerNumCapacity(10000),
+		agilepool.WithIdleContainerType(agilepool.MinHeapType),
+	))
 
 	var maxWorkerNum int = 0
 
@@ -41,9 +42,10 @@ func TestAgilePoolWorkerCapacityLimit(t *testing.T) {
 func TestAgilePoolWorkerCompletion(t *testing.T) {
 	var sum int64
 	sum = 0
-	agilePool := agilepool.NewPool()
-	agilePool.InitConfig().WithWorkerNumCapacity(10000).WithIdleContainerType(agilepool.MinHeapType)
-	agilePool.Init()
+	agilePool := agilepool.NewPool(agilepool.NewConfig(
+		agilepool.WithWorkerNumCapacity(10000),
+		agilepool.WithIdleContainerType(agilepool.MinHeapType),
+	))
 
 	for i := 0; i < 1000000; i++ {
 
@@ -66,9 +68,10 @@ func TestAgilePoolWorkerCompletion(t *testing.T) {
 func TestAgilePoolSubmitBeforeCompletion(t *testing.T) {
 	var sum int64
 	sum = 0
-	agilePool := agilepool.NewPool()
-	agilePool.InitConfig().WithWorkerNumCapacity(10000).WithIdleContainerType(agilepool.MinHeapType)
-	agilePool.Init()
+	agilePool := agilepool.NewPool(agilepool.NewConfig(
+		agilepool.WithWorkerNumCapacity(10000),
+		agilepool.WithIdleContainerType(agilepool.MinHeapType),
+	))
 
 	for i := 0; i < 1000000; i++ {
 
@@ -90,10 +93,10 @@ func TestAgilePoolSubmitBeforeCompletion(t *testing.T) {
 
 func TestAgilePoolTaskRetryTimes(t *testing.T) {
 	var times int64 = 0
-
-	agilePool := agilepool.NewPool()
-	agilePool.InitConfig().WithWorkerNumCapacity(10).WithIdleContainerType(agilepool.MinHeapType)
-	agilePool.Init()
+	agilePool := agilepool.NewPool(agilepool.NewConfig(
+		agilepool.WithWorkerNumCapacity(10),
+		agilepool.WithIdleContainerType(agilepool.MinHeapType),
+	))
 
 	agilePool.Submit(&agilepool.TaskWithRetry{
 		MinBackOff: 1 * time.Second,
@@ -133,11 +136,10 @@ func TestAgilePoolRaceStuckTaskInQueue(t *testing.T) {
 	)
 
 	for iter := 0; iter < iterations; iter++ {
-		p := agilepool.NewPool()
-		p.InitConfig().
-			WithWorkerNumCapacity(capacity).
-			WithTaskQueueSize(10000)
-		p.Init()
+		p := agilepool.NewPool(agilepool.NewConfig(
+			agilepool.WithWorkerNumCapacity(capacity),
+			agilepool.WithTaskQueueSize(10000),
+		))
 
 		var executed int64
 		var submitWG sync.WaitGroup

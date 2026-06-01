@@ -28,15 +28,12 @@ func main() {
 	// trace.Start(f)
 	// defer trace.Stop()
 
-	pool := agilepool.NewPool()
-
-	pool.InitConfig().
-		WithCleanPeriod(500 * time.Millisecond).
-		WithTaskQueueSize(10000).
-		WithWorkerNumCapacity(20000).
-		WithIdleContainerType(agilepool.LinkedListType)
-
-	pool.Init()
+	pool := agilepool.NewPool(agilepool.NewConfig(
+		agilepool.WithCleanPeriod(500*time.Millisecond),
+		agilepool.WithTaskQueueSize(10000),
+		agilepool.WithWorkerNumCapacity(20000),
+		agilepool.WithIdleContainerType(agilepool.LinkedListType),
+	))
 
 	for i := 0; i < 20000000; i++ {
 		go func() {
