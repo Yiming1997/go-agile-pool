@@ -46,10 +46,10 @@ type Pool struct {
 	lock              *sync.Mutex
 	wg                sync.WaitGroup
 	logger            Logger
-	// WorkerCreateCount counts the total allocations from sync.Pool.New
+	// workerCreateCount counts the total allocations from sync.Pool.New
 	// over the pool lifetime. For the number of currently active workers,
 	// use GetRunningWorkersNum().
-	WorkerCreateCount int64
+	workerCreateCount int64
 }
 
 func NewPool(c *Config) *Pool {
@@ -71,10 +71,10 @@ func NewPool(c *Config) *Pool {
 		p.idleWorks = newLinkedList()
 	}
 
-	atomic.StoreInt64(&p.WorkerCreateCount, 0)
+	atomic.StoreInt64(&p.workerCreateCount, 0)
 
 	p.workerPool.New = func() interface{} {
-		atomic.AddInt64(&p.WorkerCreateCount, 1)
+		atomic.AddInt64(&p.workerCreateCount, 1)
 		w := &worker{
 			pool: p,
 		}
@@ -216,4 +216,10 @@ func (p *Pool) done() {
 
 func (p *Pool) GetRunningWorkersNum() int64 {
 	return atomic.LoadInt64(&p.runningWorkersNum)
+}
+
+// GetWorkerCreateCount returns the total number of worker structs that have
+// been allocated from sync.Pool.New over the pool's lifetime.
+func (p *Pool) GetWorkerCreateCount() int64 {
+	return atomic.LoadInt64(&p.workerCreateCount)
 }
