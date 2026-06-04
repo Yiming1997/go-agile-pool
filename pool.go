@@ -33,6 +33,17 @@ type Logger interface {
 	Println(v ...interface{})
 }
 
+// defaultPool holds the most recently created Pool instance.
+// It allows users to retrieve the pool object conveniently without
+// keeping a reference themselves.
+var defaultPool atomic.Pointer[Pool]
+
+// GetDefaultPool returns the most recently created Pool, or nil if
+// no pool has been created yet.
+func GetDefaultPool() *Pool {
+	return defaultPool.Load()
+}
+
 type Pool struct {
 	taskQueue         chan Task
 	closePoolCn       chan struct{}
@@ -82,6 +93,7 @@ func NewPool(c *Config) *Pool {
 	}
 
 	go p.expiredWorkerCleaner()
+	defaultPool.Store(p)
 	return p
 }
 
