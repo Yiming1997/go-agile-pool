@@ -102,6 +102,48 @@ func BenchmarkAgilePoolSequentialLinkedList(b *testing.B) {
 	}
 }
 
+func BenchmarkAgilePoolSlice(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		pool := agilepool.NewPool(agilepool.NewConfig(
+			agilepool.WithCleanPeriod(500*time.Millisecond),
+			agilepool.WithTaskQueueSize(10000),
+			agilepool.WithWorkerNumCapacity(20000),
+			agilepool.WithIdleContainerType(agilepool.SliceType),
+		))
+
+		for j := 0; j < taskCount; j++ {
+			go func() {
+				pool.Submit(agilepool.TaskFunc(func() error {
+					time.Sleep(10 * time.Millisecond)
+					return nil
+				}))
+			}()
+		}
+		pool.Wait()
+		pool.Close()
+	}
+}
+
+func BenchmarkAgilePoolSequentialSlice(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		pool := agilepool.NewPool(agilepool.NewConfig(
+			agilepool.WithCleanPeriod(500*time.Millisecond),
+			agilepool.WithTaskQueueSize(10000),
+			agilepool.WithWorkerNumCapacity(20000),
+			agilepool.WithIdleContainerType(agilepool.SliceType),
+		))
+
+		for j := 0; j < taskCount; j++ {
+			pool.Submit(agilepool.TaskFunc(func() error {
+				time.Sleep(10 * time.Millisecond)
+				return nil
+			}))
+		}
+		pool.Wait()
+		pool.Close()
+	}
+}
+
 func BenchmarkNativeGoroutine(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		var wg sync.WaitGroup

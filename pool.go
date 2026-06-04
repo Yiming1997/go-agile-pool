@@ -65,9 +65,12 @@ func NewPool(c *Config) *Pool {
 		taskQueue:   make(chan Task, c.taskQueueSize),
 	}
 
-	if c.idleContainerType == MinHeapType {
+	switch c.idleContainerType {
+	case MinHeapType:
 		p.idleWorks = newMinHeap()
-	} else {
+	case SliceType:
+		p.idleWorks = newSlice()
+	default:
 		p.idleWorks = newLinkedList()
 	}
 
