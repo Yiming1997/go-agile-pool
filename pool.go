@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	defaultCleanPeriod          = 100 * time.Millisecond
+	defaultCleanPeriod          = 500 * time.Millisecond
 	defaultTaskQueueSize        = 10000
 	defaultMaxWorkerNumCapacity = math.MaxInt64
 	defaultWorkMode             = BLOCK
