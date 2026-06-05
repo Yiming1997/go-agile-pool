@@ -65,7 +65,7 @@ func (s *Slice) RemoveExpired(now time.Time, expiry time.Duration) int {
 
 // Len returns the number of workers in the slice.
 func (s *Slice) Len() int64 {
-	return s.length
+	return atomic.LoadInt64(&s.length)
 }
 
 // newSlice creates a new empty Slice.
