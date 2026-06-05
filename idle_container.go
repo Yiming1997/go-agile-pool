@@ -10,6 +10,8 @@ const (
 	LinkedListType IdleContainerType = iota
 	// MinHeapType uses a min-heap ordered by lastActiveAt for idle worker management.
 	MinHeapType
+	// SliceType uses a dynamic array (slice) with FIFO order for idle worker management.
+	SliceType
 )
 
 // IdleWorkerContainer abstracts the data structure for managing idle workers.
