@@ -39,9 +39,13 @@ type Logger interface {
 var defaultPool atomic.Pointer[Pool]
 
 // GetDefaultPool returns the most recently created Pool, or nil if
-// no pool has been created yet.
+// no pool has been created yet or the pool has been closed.
 func GetDefaultPool() *Pool {
-	return defaultPool.Load()
+	p := defaultPool.Load()
+	if p != nil && atomic.LoadInt32(&p.closed) == 1 {
+		return nil
+	}
+	return p
 }
 
 type Pool struct {
@@ -218,6 +222,7 @@ func (p *Pool) Close() {
 	if !atomic.CompareAndSwapInt32(&p.closed, 0, 1) {
 		return
 	}
+	defaultPool.CompareAndSwap(p, nil)
 	close(p.closePoolCn)
 }
 
