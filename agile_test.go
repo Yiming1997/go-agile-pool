@@ -18,25 +18,40 @@ func TestAgilePoolWorkerCapacityLimit(t *testing.T) {
 		agilepool.WithIdleContainerType(agilepool.MinHeapType),
 	))
 
-	var maxWorkerNum int = 0
+	var maxWorkerNum int64
 
-	for i := 0; i < 10000000; i++ {
+	n := 10000000
+	if testing.Short() {
+		n = 100000
+	}
 
+	var submitWG sync.WaitGroup
+	for i := 0; i < n; i++ {
+		submitWG.Add(1)
 		go func() {
+			defer submitWG.Done()
 			agilePool.Submit(
 				agilepool.TaskFunc(func() error {
-					if int(agilePool.GetRunningWorkersNum()) > maxWorkerNum {
-						maxWorkerNum = int(agilePool.GetRunningWorkersNum())
+					cur := int64(agilePool.GetRunningWorkersNum())
+					for {
+						old := atomic.LoadInt64(&maxWorkerNum)
+						if cur <= old {
+							break
+						}
+						if atomic.CompareAndSwapInt64(&maxWorkerNum, old, cur) {
+							break
+						}
 					}
 					time.Sleep(10 * time.Millisecond)
 					return nil
 				}),
 			)
 		}()
-
 	}
+
+	submitWG.Wait()
 	agilePool.Wait()
-	assert.LessOrEqual(t, maxWorkerNum, 10000)
+	assert.LessOrEqual(t, atomic.LoadInt64(&maxWorkerNum), int64(10000))
 }
 
 func TestAgilePoolWorkerCompletion(t *testing.T) {
@@ -47,9 +62,16 @@ func TestAgilePoolWorkerCompletion(t *testing.T) {
 		agilepool.WithIdleContainerType(agilepool.MinHeapType),
 	))
 
-	for i := 0; i < 1000000; i++ {
+	n := 1000000
+	if testing.Short() {
+		n = 10000
+	}
 
+	var submitWG sync.WaitGroup
+	for i := 0; i < n; i++ {
+		submitWG.Add(1)
 		go func() {
+			defer submitWG.Done()
 			agilePool.Submit(
 				agilepool.TaskFunc(func() error {
 					atomic.AddInt64(&sum, int64(1))
@@ -57,12 +79,12 @@ func TestAgilePoolWorkerCompletion(t *testing.T) {
 				}),
 			)
 		}()
-
 	}
 
+	submitWG.Wait()
 	agilePool.Wait()
 
-	assert.Equal(t, sum, int64(1000000))
+	assert.Equal(t, sum, int64(n))
 }
 
 func TestAgilePoolSubmitBeforeCompletion(t *testing.T) {
@@ -73,9 +95,16 @@ func TestAgilePoolSubmitBeforeCompletion(t *testing.T) {
 		agilepool.WithIdleContainerType(agilepool.MinHeapType),
 	))
 
-	for i := 0; i < 1000000; i++ {
+	n := 1000000
+	if testing.Short() {
+		n = 10000
+	}
 
+	var submitWG sync.WaitGroup
+	for i := 0; i < n; i++ {
+		submitWG.Add(1)
 		go func() {
+			defer submitWG.Done()
 			agilePool.SubmitBefore(
 				agilepool.TaskFunc(func() error {
 					time.Sleep(10 * time.Millisecond)
@@ -84,11 +113,11 @@ func TestAgilePoolSubmitBeforeCompletion(t *testing.T) {
 				}), 10*time.Second,
 			)
 		}()
-
 	}
 
+	submitWG.Wait()
 	agilePool.Wait()
-	assert.Equal(t, sum, int64(1000000))
+	assert.Equal(t, sum, int64(n))
 }
 
 func TestAgilePoolTaskRetryTimes(t *testing.T) {
@@ -98,9 +127,16 @@ func TestAgilePoolTaskRetryTimes(t *testing.T) {
 		agilepool.WithIdleContainerType(agilepool.MinHeapType),
 	))
 
+	minBackOff := 1 * time.Second
+	maxBackOff := 200 * time.Second
+	if testing.Short() {
+		minBackOff = 1 * time.Millisecond
+		maxBackOff = 10 * time.Millisecond
+	}
+
 	agilePool.Submit(&agilepool.TaskWithRetry{
-		MinBackOff: 1 * time.Second,
-		MaxBackOff: 200 * time.Second,
+		MinBackOff: minBackOff,
+		MaxBackOff: maxBackOff,
 		RetryNum:   3,
 		Task: func() error {
 			times++
@@ -121,19 +157,22 @@ func TestAgilePoolTaskRetryTimes(t *testing.T) {
 //  2. Worker finishes its task, select-loop sees empty queue, goes to default,
 //     adds self to idleWorkers, goroutine exits, running-- (worker.go:63-65)
 //  3. Submit pushes task into taskQueue (pool.go:133)
-//     → no goroutine is reading the channel, task is stuck forever
+//     -> no goroutine is reading the channel, task is stuck forever
 //
-// The key insight: this bug is "self-healing" — any subsequent Submit will
+// The key insight: this bug is "self-healing" -- any subsequent Submit will
 // spawn a new worker that drains the stuck task. Only the *last* Submit of
 // a pool's lifetime can permanently lose a task. So we create many small
 // isolated pool lifetimes to amplify the exposure.
 func TestAgilePoolRaceStuckTaskInQueue(t *testing.T) {
-	const (
-		iterations = 5000
-		batchSize  = 200
-		capacity   = int64(1)
-		deadline   = 2 * time.Second
-	)
+	iterations := 5000
+	batchSize := 200
+	capacity := int64(1)
+	deadline := 2 * time.Second
+
+	if testing.Short() {
+		iterations = 200
+		deadline = 5 * time.Second
+	}
 
 	for iter := 0; iter < iterations; iter++ {
 		p := agilepool.NewPool(agilepool.NewConfig(
@@ -158,13 +197,13 @@ func TestAgilePoolRaceStuckTaskInQueue(t *testing.T) {
 		}
 
 		// Wait until all Submit calls have returned.
-		// After this point no more tasks will be submitted — this is the
+		// After this point no more tasks will be submitted -- this is the
 		// critical "end-of-life" moment where the race becomes visible.
 		submitWG.Wait()
 
 		// Run pool.Wait() in a goroutine; if it doesn't return within the
 		// deadline, a task is stranded in the queue and wg.Done() was never
-		// called for it → the race triggered.
+		// called for it -> the race triggered.
 		done := make(chan struct{})
 		go func() {
 			p.Wait()
