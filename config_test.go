@@ -8,8 +8,8 @@ import (
 
 func TestNewConfigDefaults(t *testing.T) {
 	c := NewConfig()
-	if c.cleanPeriod != 100*time.Millisecond {
-		t.Errorf("cleanPeriod = %v, want 100ms", c.cleanPeriod)
+	if c.cleanPeriod != 500*time.Millisecond {
+		t.Errorf("cleanPeriod = %v, want 500ms", c.cleanPeriod)
 	}
 	if c.taskQueueSize != 10000 {
 		t.Errorf("taskQueueSize = %d, want 10000", c.taskQueueSize)
@@ -60,8 +60,8 @@ func TestWithGuardsIgnoreNonPositive(t *testing.T) {
 		WithTaskQueueSize(0),
 		WithWorkerNumCapacity(-5),
 	)
-	if c.cleanPeriod != 100*time.Millisecond {
-		t.Errorf("cleanPeriod = %v, want default 100ms (zero ignored)", c.cleanPeriod)
+	if c.cleanPeriod != 500*time.Millisecond {
+		t.Errorf("cleanPeriod = %v, want default 500ms (zero ignored)", c.cleanPeriod)
 	}
 	if c.taskQueueSize != 10000 {
 		t.Errorf("taskQueueSize = %d, want default 10000 (zero ignored)", c.taskQueueSize)
