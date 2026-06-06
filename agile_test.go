@@ -2,6 +2,7 @@ package agilepool_test
 
 import (
 	"errors"
+	"io"
 	"log"
 	"sync"
 	"sync/atomic"
@@ -111,6 +112,47 @@ func TestAgilePoolTaskRetryTimes(t *testing.T) {
 
 	agilePool.Wait()
 	assert.Equal(t, times, int64(4))
+}
+
+func TestAgilePoolTaskPanicDoesNotBreakPool(t *testing.T) {
+	agilePool := agilepool.NewPool(agilepool.NewConfig(
+		agilepool.WithWorkerNumCapacity(1),
+		agilepool.WithTaskQueueSize(10),
+	))
+	agilePool.SetLogger(log.New(io.Discard, "", 0))
+	defer agilePool.Close()
+
+	var executed int64
+
+	agilePool.Submit(agilepool.TaskFunc(func() error {
+		panic("boom")
+	}))
+	agilePool.Submit(agilepool.TaskFunc(func() error {
+		atomic.AddInt64(&executed, 1)
+		return nil
+	}))
+
+	done := make(chan struct{})
+	go func() {
+		agilePool.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("pool.Wait() timed out after a task panic")
+	}
+
+	assert.Equal(t, int64(1), atomic.LoadInt64(&executed))
+
+	agilePool.Submit(agilepool.TaskFunc(func() error {
+		atomic.AddInt64(&executed, 1)
+		return nil
+	}))
+	agilePool.Wait()
+
+	assert.Equal(t, int64(2), atomic.LoadInt64(&executed))
 }
 
 // TestAgilePoolRaceStuckTaskInQueue reproduces a race condition where a task
