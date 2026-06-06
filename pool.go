@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	defaultCleanPeriod          = 100 * time.Millisecond
+	defaultCleanPeriod          = 500 * time.Millisecond
 	defaultTaskQueueSize        = 10000
 	defaultMaxWorkerNumCapacity = math.MaxInt64
 	defaultWorkMode             = BLOCK
@@ -31,6 +31,21 @@ const (
 type Logger interface {
 	Printf(format string, v ...interface{})
 	Println(v ...interface{})
+}
+
+// defaultPool holds the most recently created Pool instance.
+// It allows users to retrieve the pool object conveniently without
+// keeping a reference themselves.
+var defaultPool atomic.Pointer[Pool]
+
+// GetDefaultPool returns the most recently created Pool, or nil if
+// no pool has been created yet or the pool has been closed.
+func GetDefaultPool() *Pool {
+	p := defaultPool.Load()
+	if p != nil && atomic.LoadInt32(&p.closed) == 1 {
+		return nil
+	}
+	return p
 }
 
 type Pool struct {
@@ -65,9 +80,12 @@ func NewPool(c *Config) *Pool {
 		taskQueue:   make(chan Task, c.taskQueueSize),
 	}
 
-	if c.idleContainerType == MinHeapType {
+	switch c.idleContainerType {
+	case MinHeapType:
 		p.idleWorks = newMinHeap()
-	} else {
+	case SliceType:
+		p.idleWorks = newSlice()
+	default:
 		p.idleWorks = newLinkedList()
 	}
 
@@ -82,6 +100,7 @@ func NewPool(c *Config) *Pool {
 	}
 
 	go p.expiredWorkerCleaner()
+	defaultPool.Store(p)
 	return p
 }
 
@@ -203,6 +222,7 @@ func (p *Pool) Close() {
 	if !atomic.CompareAndSwapInt32(&p.closed, 0, 1) {
 		return
 	}
+	defaultPool.CompareAndSwap(p, nil)
 	close(p.closePoolCn)
 }
 
