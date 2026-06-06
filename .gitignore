@@ -1,1 +1,5 @@
 /example/cpu_profile.prof
+.omc/
+.codegraph/
+CLAUDE.md
+docs/superpowers/
