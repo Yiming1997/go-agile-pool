@@ -139,3 +139,18 @@ func BenchmarkNativeGoroutine(b *testing.B) {
 		wg.Wait()
 	}
 }
+
+func BenchmarkNativeGoroutineNoLimit(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		var wg sync.WaitGroup
+
+		for j := 0; j < taskCount; j++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				time.Sleep(10 * time.Millisecond)
+			}()
+		}
+		wg.Wait()
+	}
+}
