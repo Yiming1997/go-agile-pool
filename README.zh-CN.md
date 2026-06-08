@@ -65,7 +65,7 @@ defer pool.Close()
 
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `WithCleanPeriod` | `100ms` | 后台清理器检查空闲 worker 的频率。 |
+| `WithCleanPeriod` | `500ms` | 后台清理器检查空闲 worker 的频率。 |
 | `WithTaskQueueSize` | `10000` | 所有 worker 忙碌时使用的缓冲队列大小。 |
 | `WithWorkerNumCapacity` | `math.MaxInt64` | 最大运行 worker 数量。 |
 | `WithBlockMode` | `BLOCK` | `BLOCK` 在达到容量后将任务放入队列；`NONBLOCK` 在达到容量后丢弃提交。 |
