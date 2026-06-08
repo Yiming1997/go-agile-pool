@@ -1,6 +1,7 @@
 package agilepool_test
 
 import (
+	"context"
 	"errors"
 	"io"
 	"log"
@@ -12,6 +13,142 @@ import (
 	agilepool "github.com/Yiming1997/go-agile-pool"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestAgilePoolSubmitNilTaskDoesNotBlockWait(t *testing.T) {
+	agilePool := agilepool.NewPool(agilepool.NewConfig())
+	defer agilePool.Close()
+
+	agilePool.Submit(nil)
+	agilePool.Wait()
+}
+
+func TestAgilePoolSubmitTypedNilTaskDoesNotBlockWait(t *testing.T) {
+	agilePool := agilepool.NewPool(agilepool.NewConfig())
+	defer agilePool.Close()
+
+	var task agilepool.TaskFunc
+	agilePool.Submit(task)
+	agilePool.Wait()
+}
+
+func TestAgilePoolSubmitBeforeNilTaskDoesNotBlockWait(t *testing.T) {
+	agilePool := agilepool.NewPool(agilepool.NewConfig())
+	defer agilePool.Close()
+
+	agilePool.SubmitBefore(nil, time.Second)
+	agilePool.Wait()
+}
+
+func TestAgilePoolSubmitCtxCanceledBeforeSubmitDoesNotExecute(t *testing.T) {
+	agilePool := agilepool.NewPool(agilepool.NewConfig())
+	defer agilePool.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var executed int64
+	agilePool.SubmitCtx(ctx, agilepool.TaskFunc(func() error {
+		atomic.AddInt64(&executed, 1)
+		return nil
+	}))
+	agilePool.Wait()
+
+	assert.Equal(t, int64(0), atomic.LoadInt64(&executed))
+}
+
+func TestAgilePoolSubmitCtxCanceledWhileQueuedSkipsTask(t *testing.T) {
+	agilePool := agilepool.NewPool(agilepool.NewConfig(
+		agilepool.WithWorkerNumCapacity(1),
+		agilepool.WithTaskQueueSize(10),
+	))
+	defer agilePool.Close()
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	agilePool.Submit(agilepool.TaskFunc(func() error {
+		close(started)
+		<-release
+		return nil
+	}))
+	<-started
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var executed int64
+	agilePool.SubmitCtx(ctx, agilepool.TaskFunc(func() error {
+		atomic.AddInt64(&executed, 1)
+		return nil
+	}))
+	cancel()
+	close(release)
+	agilePool.Wait()
+
+	assert.Equal(t, int64(0), atomic.LoadInt64(&executed))
+}
+
+func TestAgilePoolSubmitCtxRunningTaskObservesCancel(t *testing.T) {
+	agilePool := agilepool.NewPool(agilepool.NewConfig())
+	defer agilePool.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	started := make(chan struct{})
+	var canceled int64
+
+	agilePool.SubmitCtx(ctx, agilepool.TaskFunc(func() error {
+		close(started)
+		<-ctx.Done()
+		atomic.AddInt64(&canceled, 1)
+		return ctx.Err()
+	}))
+	<-started
+	cancel()
+	agilePool.Wait()
+
+	assert.Equal(t, int64(1), atomic.LoadInt64(&canceled))
+}
+
+func TestAgilePoolSubmitCtxCancelsWhileWaitingForQueueSpace(t *testing.T) {
+	agilePool := agilepool.NewPool(agilepool.NewConfig(
+		agilepool.WithWorkerNumCapacity(1),
+		agilepool.WithTaskQueueSize(1),
+	))
+	defer agilePool.Close()
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	agilePool.Submit(agilepool.TaskFunc(func() error {
+		close(started)
+		<-release
+		return nil
+	}))
+	<-started
+
+	agilePool.Submit(agilepool.TaskFunc(func() error {
+		return nil
+	}))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	returned := make(chan struct{})
+	var executed int64
+	go func() {
+		agilePool.SubmitCtx(ctx, agilepool.TaskFunc(func() error {
+			atomic.AddInt64(&executed, 1)
+			return nil
+		}))
+		close(returned)
+	}()
+
+	cancel()
+	select {
+	case <-returned:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("SubmitCtx did not return after context cancellation")
+	}
+
+	close(release)
+	agilePool.Wait()
+
+	assert.Equal(t, int64(0), atomic.LoadInt64(&executed))
+}
 
 func TestAgilePoolWorkerCapacityLimit(t *testing.T) {
 	agilePool := agilepool.NewPool(agilepool.NewConfig(
