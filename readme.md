@@ -1,5 +1,18 @@
 # go-agile-pool
 
+<p align="center">
+  <img src="assets/logo.jpg" alt="go-agile-pool logo" width="260">
+</p>
+
+<p align="center">
+  <a href="https://github.com/Yiming1997/go-agile-pool/actions/workflows/ci.yml"><img src="https://github.com/Yiming1997/go-agile-pool/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://go.dev/"><img src="https://img.shields.io/badge/go-%3E%3D1.23.4-00ADD8" alt="Go Version"></a>
+  <a href="https://github.com/Yiming1997/go-agile-pool/tags"><img src="https://img.shields.io/github/v/tag/Yiming1997/go-agile-pool?label=tag" alt="Tag"></a>
+  <a href="https://pkg.go.dev/github.com/Yiming1997/go-agile-pool"><img src="https://pkg.go.dev/badge/github.com/Yiming1997/go-agile-pool.svg" alt="Go Reference"></a>
+  <a href="https://goreportcard.com/report/github.com/Yiming1997/go-agile-pool"><img src="https://goreportcard.com/badge/github.com/Yiming1997/go-agile-pool" alt="Go Report Card"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Yiming1997/go-agile-pool" alt="License"></a>
+</p>
+
 [简体中文](README.zh-CN.md)
 
 `go-agile-pool` is a lightweight goroutine pool for Go. It provides bounded worker concurrency, a buffered task queue, idle worker reuse, retryable tasks, and graceful shutdown helpers for applications that need to submit large numbers of small asynchronous jobs without creating unbounded goroutines.
