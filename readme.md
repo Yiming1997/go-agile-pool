@@ -65,7 +65,7 @@ Available options:
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `WithCleanPeriod` | `100ms` | How often the background cleaner checks idle workers. |
+| `WithCleanPeriod` | `500ms` | How often the background cleaner checks idle workers. |
 | `WithTaskQueueSize` | `10000` | Buffered queue size used when all workers are busy. |
 | `WithWorkerNumCapacity` | `math.MaxInt64` | Maximum number of running workers. |
 | `WithBlockMode` | `BLOCK` | `BLOCK` queues tasks when capacity is reached; `NONBLOCK` drops submissions when capacity is reached. |
