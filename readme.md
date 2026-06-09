@@ -212,6 +212,7 @@ Run a single benchmark:
 go test -bench=BenchmarkAgilePoolMinHeap -benchtime=1x -timeout=2h -run=^$ -count=1
 ```
 
+<<<<<<< HEAD
 The following benchmark code only tests go-agile-pool. Save it as a `_test.go` file and run:
 
 ```bash
@@ -300,3 +301,20 @@ AgilePool MinHeap is the **fastest** (6.20s) while also being the **most memory-
 | Ants Seq | 7.87s | 171.5 MB | 10,140,321 |
 | Pond Seq | 13.34s | 3,363.9 MB | 80,004,361 |
 | Gowp Seq | 6.07s | 1,929.9 MB | 10,061,537 |
+=======
+The benchmark suite compares concurrent and sequential submissions with multiple idle container implementations, plus native goroutine and popular Goroutine pool libraries. All benchmarks simulate an IO-bound task with `time.Sleep(10 * time.Millisecond)`.
+
+Below are results at **worker capacity = 20,000** (go 1.23, measured via `-benchmem`):
+
+| Pool | 100K tasks | 500K tasks | 1M tasks |
+|------|-----------|-----------|---------|
+| **AgilePool** | 163ms / 34.7 MB | 385ms / 46.2 MB | **711ms** / **51.3 MB** |
+| Ants | 99ms / 10.8 MB | 433ms / 20.9 MB | 831ms / 32.8 MB |
+| Pond | 156ms / 15.1 MB | 984ms / 23.3 MB | 2241ms / 39.3 MB |
+| Gowp | 117ms / 25.2 MB | 483ms / 98.4 MB | 940ms / 193.3 MB |
+| Native(sem) | **69ms** / 13.5 MB | **316ms** / 61.2 MB | 633ms / 120.4 MB |
+
+> At 1M tasks, AgilePool is the **fastest** (711ms) and **most memory-efficient** (51.3 MB). Ants is close on memory (32.8 MB) but slower (831ms). Gowp and Native suffer from severe memory blow-up at scale (193 MB / 120 MB).
+
+Memory efficiency ranking at 1M tasks: **AgilePool > Ants > Pond > Native > Gowp**.
+>>>>>>> f529465 (docs-update)
