@@ -185,18 +185,91 @@ Run a single benchmark:
 go test -bench=BenchmarkAgilePoolMinHeap -benchtime=1x -timeout=2h -run=^$ -count=1
 ```
 
-The benchmark suite compares concurrent and sequential submissions with multiple idle container implementations, plus native goroutine and popular Goroutine pool libraries. All benchmarks simulate an IO-bound task with `time.Sleep(10 * time.Millisecond)`.
+The following benchmark code only tests go-agile-pool. Save it as a `_test.go` file and run:
 
-Below are results at **worker capacity = 20,000** (go 1.23, measured via `-benchmem`):
+```bash
+go test -bench=BenchmarkAgilePool -benchtime=1x -timeout=2h -run=^$
+```
 
-| Pool | 100K tasks | 500K tasks | 1M tasks |
-|------|-----------|-----------|---------|
-| **AgilePool** | 163ms / 34.7 MB | 385ms / 46.2 MB | **711ms** / **51.3 MB** |
-| Ants | 99ms / 10.8 MB | 433ms / 20.9 MB | 831ms / 32.8 MB |
-| Pond | 156ms / 15.1 MB | 984ms / 23.3 MB | 2241ms / 39.3 MB |
-| Gowp | 117ms / 25.2 MB | 483ms / 98.4 MB | 940ms / 193.3 MB |
-| Native(sem) | **69ms** / 13.5 MB | **316ms** / 61.2 MB | 633ms / 120.4 MB |
+```go
+package agilepool_test
 
-> At 1M tasks, AgilePool is the **fastest** (711ms) and **most memory-efficient** (51.3 MB). Ants is close on memory (32.8 MB) but slower (831ms). Gowp and Native suffer from severe memory blow-up at scale (193 MB / 120 MB).
+import (
+	"testing"
+	"time"
 
-Memory efficiency ranking at 1M tasks: **AgilePool > Ants > Pond > Native > Gowp**.
+	agilepool "github.com/Yiming1997/go-agile-pool"
+)
+
+const taskCount = 10000000
+
+// Concurrent submission benchmark
+func BenchmarkAgilePoolMinHeap(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		pool := agilepool.NewPool(agilepool.NewConfig(
+			agilepool.WithWorkerNumCapacity(20000),
+			agilepool.WithIdleContainerType(agilepool.MinHeapType),
+		))
+
+		for j := 0; j < taskCount; j++ {
+			go func() {
+				pool.Submit(agilepool.TaskFunc(func() error {
+					time.Sleep(10 * time.Millisecond)
+					return nil
+				}))
+			}()
+		}
+		pool.Wait()
+		pool.Close()
+	}
+}
+
+// Sequential submission benchmark
+func BenchmarkAgilePoolSequentialLinkedList(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		pool := agilepool.NewPool(agilepool.NewConfig(
+			agilepool.WithWorkerNumCapacity(20000),
+			agilepool.WithIdleContainerType(agilepool.LinkedListType),
+		))
+
+		for j := 0; j < taskCount; j++ {
+			pool.Submit(agilepool.TaskFunc(func() error {
+				time.Sleep(10 * time.Millisecond)
+				return nil
+			}))
+		}
+		pool.Wait()
+		pool.Close()
+	}
+}
+```
+
+> **Note**: Adjust `taskCount` for quick smoke tests (e.g. `1000`).
+
+The full benchmark suite compares concurrent and sequential submissions with multiple idle container implementations, plus native goroutine and popular Goroutine pool libraries. All benchmarks simulate an IO-bound task with `time.Sleep(10 * time.Millisecond)` and run **10 million tasks** (worker capacity = 20,000, go 1.23, measured via `b.ReportAllocs()`).
+
+**Concurrent submission (10M tasks):**
+
+| Pool | Time | Memory | Allocations |
+|------|------|--------|-------------|
+| **AgilePool MinHeap** | 6.20s | 463.4 MB | 10,303,830 |
+| **AgilePool LinkedList** | 6.95s | 419.5 MB | 10,202,989 |
+| Native(sem) | 6.65s | 1,201.2 MB | 20,002,053 |
+| Ants | 9.40s | 495.9 MB | 20,184,630 |
+| Pond | 26.9s | 4,328.9 MB | 73,225,096 |
+| Gowp | 9.80s | 2,185.1 MB | 20,219,299 |
+
+AgilePool MinHeap is the **fastest** (6.20s) while also being the **most memory-efficient** (463.4 MB). Native(sem) is close in speed but uses 2.6× memory. Pond is the worst across all metrics.
+
+**Sequential submission (10M tasks):**
+
+| Pool | Time | Memory | Allocations |
+|------|------|--------|-------------|
+| **AgilePool Seq LinkedList** | 5.37s | 166.7 MB | 137,045 |
+| **AgilePool Seq Slice** | 5.34s | 167.5 MB | 103,834 |
+| **AgilePool Seq MinHeap** | 5.76s | 283.3 MB | 1,874,468 |
+| Ants Seq | 7.87s | 171.5 MB | 10,140,321 |
+| Pond Seq | 13.34s | 3,363.9 MB | 80,004,361 |
+| Gowp Seq | 6.07s | 1,929.9 MB | 10,061,537 |
