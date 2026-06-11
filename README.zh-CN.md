@@ -185,18 +185,92 @@ go test -bench=. -benchtime=1x -timeout=2h -run=^$ -count=1
 go test -bench=BenchmarkAgilePoolMinHeap -benchtime=1x -timeout=2h -run=^$ -count=1
 ```
 
-当前基准测试会比较并发提交、顺序提交、多种空闲容器实现，以及原生 goroutine 和流行的 goroutine 池库。所有基准测试模拟 IO 密集型任务，使用 `time.Sleep(10 * time.Millisecond)`。
+以下基准测试代码仅测试 go-agile-pool 自身。保存为 `_test.go` 文件后运行：
 
-以下结果为 **worker 容量 = 20,000** 时的测试数据（go 1.23，通过 `-benchmem` 测量）：
+```bash
+go test -bench=BenchmarkAgilePool -benchtime=1x -timeout=2h -run=^$
+```
 
-| 库 | 10 万任务 | 50 万任务 | 100 万任务 |
-|------|-----------|-----------|---------|
-| **AgilePool** | 163ms / 34.7 MB | 385ms / 46.2 MB | **711ms** / **51.3 MB** |
-| Ants | 99ms / 10.8 MB | 433ms / 20.9 MB | 831ms / 32.8 MB |
-| Pond | 156ms / 15.1 MB | 984ms / 23.3 MB | 2241ms / 39.3 MB |
-| Gowp | 117ms / 25.2 MB | 483ms / 98.4 MB | 940ms / 193.3 MB |
-| Native(sem) | **69ms** / 13.5 MB | **316ms** / 61.2 MB | 633ms / 120.4 MB |
+```go
+package agilepool_test
 
-> 100 万任务时，AgilePool **速度最快**（711ms）且 **内存最优**（51.3 MB）。Ants 内存接近（32.8 MB）但速度较慢（831ms）。Gowp 和 Native 内存膨胀严重（193 MB / 120 MB）。
+import (
+	"testing"
+	"time"
 
-内存效率排名（100 万任务）：**AgilePool > Ants > Pond > Native > Gowp**。
+	agilepool "github.com/Yiming1997/go-agile-pool"
+)
+
+const taskCount = 10000000
+
+// 并发提交基准测试
+func BenchmarkAgilePoolMinHeap(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		pool := agilepool.NewPool(agilepool.NewConfig(
+			agilepool.WithWorkerNumCapacity(20000),
+			agilepool.WithIdleContainerType(agilepool.MinHeapType),
+		))
+
+		for j := 0; j < taskCount; j++ {
+			go func() {
+				pool.Submit(agilepool.TaskFunc(func() error {
+					time.Sleep(10 * time.Millisecond)
+					return nil
+				}))
+			}()
+		}
+		pool.Wait()
+		pool.Close()
+	}
+}
+
+// 顺序提交基准测试
+func BenchmarkAgilePoolSequentialLinkedList(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		pool := agilepool.NewPool(agilepool.NewConfig(
+			agilepool.WithWorkerNumCapacity(20000),
+			agilepool.WithIdleContainerType(agilepool.LinkedListType),
+		))
+
+		for j := 0; j < taskCount; j++ {
+			pool.Submit(agilepool.TaskFunc(func() error {
+				time.Sleep(10 * time.Millisecond)
+				return nil
+			}))
+		}
+		pool.Wait()
+		pool.Close()
+	}
+}
+```
+
+> **提示**：可调整 `taskCount` 快速测试（如 `1000`）。
+
+完整基准测试会比较并发提交、顺序提交、多种空闲容器实现，以及原生 goroutine 和流行的 goroutine 池库。所有基准测试模拟 IO 密集型任务，使用 `time.Sleep(10 * time.Millisecond)`，运行 **1000 万任务**（worker 容量 = 20,000，go 1.23，通过 `b.ReportAllocs()` 测量）。
+
+**并发提交（1000 万任务）：**
+
+| 库 | 耗时 | 内存 | 分配次数 |
+|------|------|--------|---------|
+| **AgilePool MinHeap** | 6.20s | 463.4 MB | 10,303,830 |
+| **AgilePool LinkedList** | 6.95s | 419.5 MB | 10,202,989 |
+| Native(sem) | 6.65s | 1,201.2 MB | 20,002,053 |
+| Ants | 9.40s | 495.9 MB | 20,184,630 |
+| Pond | 26.9s | 4,328.9 MB | 73,225,096 |
+| Gowp | 9.80s | 2,185.1 MB | 20,219,299 |
+
+AgilePool MinHeap **速度最快**（6.20s）且 **内存最优**（463.4 MB）。Native(sem) 速度接近但内存是其 2.6 倍。Pond 在所有指标中表现最差。
+
+**顺序提交（1000 万任务）：**
+
+| 库 | 耗时 | 内存 | 分配次数 |
+|------|------|--------|---------|
+| **AgilePool Seq LinkedList** | 5.37s | 166.7 MB | 137,045 |
+| **AgilePool Seq Slice** | 5.34s | 167.5 MB | 103,834 |
+| **AgilePool Seq MinHeap** | 5.76s | 283.3 MB | 1,874,468 |
+| Ants Seq | 7.87s | 171.5 MB | 10,140,321 |
+| Pond Seq | 13.34s | 3,363.9 MB | 80,004,361 |
+| Gowp Seq | 6.07s | 1,929.9 MB | 10,061,537 |
+
