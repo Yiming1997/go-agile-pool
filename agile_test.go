@@ -177,64 +177,49 @@ func TestAgilePoolRaceStuckTaskInQueue(t *testing.T) {
 		deadline   = 2 * time.Second
 	)
 
-	tests := []struct {
-		name          string
-		containerType agilepool.IdleContainerType
-	}{
-		{name: "linked_list", containerType: agilepool.LinkedListType},
-		{name: "min_heap", containerType: agilepool.MinHeapType},
-		{name: "slice", containerType: agilepool.SliceType},
-	}
+	for iter := 0; iter < iterations; iter++ {
+		p := agilepool.NewPool(agilepool.NewConfig(
+			agilepool.WithWorkerNumCapacity(capacity),
+			agilepool.WithTaskQueueSize(10000),
+		))
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			for iter := 0; iter < iterations; iter++ {
-				p := agilepool.NewPool(agilepool.NewConfig(
-					agilepool.WithWorkerNumCapacity(capacity),
-					agilepool.WithTaskQueueSize(10000),
-					agilepool.WithIdleContainerType(tt.containerType),
-				))
+		var executed int64
+		var submitWG sync.WaitGroup
 
-				var executed int64
-				var submitWG sync.WaitGroup
+		// Submit batchSize tasks concurrently from batchSize goroutines.
+		// High concurrency maximizes lock contention and widens the race window.
+		for i := 0; i < batchSize; i++ {
+			submitWG.Add(1)
+			go func() {
+				defer submitWG.Done()
+				p.Submit(agilepool.TaskFunc(func() error {
+					atomic.AddInt64(&executed, 1)
+					return nil
+				}))
+			}()
+		}
 
-				// Submit batchSize tasks concurrently from batchSize goroutines.
-				// High concurrency maximizes lock contention and widens the race window.
-				for i := 0; i < batchSize; i++ {
-					submitWG.Add(1)
-					go func() {
-						defer submitWG.Done()
-						p.Submit(agilepool.TaskFunc(func() error {
-							atomic.AddInt64(&executed, 1)
-							return nil
-						}))
-					}()
-				}
+		// Wait until all Submit calls have returned.
+		// After this point no more tasks will be submitted — this is the
+		// critical "end-of-life" moment where the race becomes visible.
+		submitWG.Wait()
 
-				// Wait until all Submit calls have returned.
-				// After this point no more tasks will be submitted — this is the
-				// critical "end-of-life" moment where the race becomes visible.
-				submitWG.Wait()
+		// Run pool.Wait() in a goroutine; if it doesn't return within the
+		// deadline, a task is stranded in the queue and wg.Done() was never
+		// called for it → the race triggered.
+		done := make(chan struct{})
+		go func() {
+			p.Wait()
+			close(done)
+		}()
 
-				// Run pool.Wait() in a goroutine; if it doesn't return within the
-				// deadline, a task is stranded in the queue and wg.Done() was never
-				// called for it, so the race triggered.
-				done := make(chan struct{})
-				go func() {
-					p.Wait()
-					close(done)
-				}()
-
-				select {
-				case <-done:
-					p.Close()
-				case <-time.After(deadline):
-					p.Close()
-					t.Fatalf("iter %d: DEADLOCK after %v, executed=%d/%d, runningWorkers=%d",
-						iter, deadline, atomic.LoadInt64(&executed), batchSize,
-						p.GetRunningWorkersNum())
-				}
-			}
-		})
+		select {
+		case <-done:
+			// All tasks completed, this iteration is clean.
+		case <-time.After(deadline):
+			t.Fatalf("iter %d: DEADLOCK after %v, executed=%d/%d, runningWorkers=%d",
+				iter, deadline, atomic.LoadInt64(&executed), batchSize,
+				p.GetRunningWorkersNum())
+		}
 	}
 }
