@@ -14,43 +14,65 @@ import (
 )
 
 func TestAgilePoolWorkerCapacityLimit(t *testing.T) {
+	taskCount := 10000000
+	workerCapacity := int64(10000)
+	if testing.Short() {
+		taskCount = 20000
+		workerCapacity = 100
+	}
+
 	agilePool := agilepool.NewPool(agilepool.NewConfig(
-		agilepool.WithWorkerNumCapacity(10000),
+		agilepool.WithWorkerNumCapacity(workerCapacity),
 		agilepool.WithIdleContainerType(agilepool.MinHeapType),
 	))
+	defer agilePool.Close()
 
-	var maxWorkerNum int = 0
+	var maxWorkerNum int64
+	var submitWG sync.WaitGroup
 
-	for i := 0; i < 10000000; i++ {
-
+	for i := 0; i < taskCount; i++ {
+		submitWG.Add(1)
 		go func() {
+			defer submitWG.Done()
 			agilePool.Submit(
 				agilepool.TaskFunc(func() error {
-					if int(agilePool.GetRunningWorkersNum()) > maxWorkerNum {
-						maxWorkerNum = int(agilePool.GetRunningWorkersNum())
+					running := agilePool.GetRunningWorkersNum()
+					for {
+						currentMax := atomic.LoadInt64(&maxWorkerNum)
+						if running <= currentMax ||
+							atomic.CompareAndSwapInt64(&maxWorkerNum, currentMax, running) {
+							break
+						}
 					}
 					time.Sleep(10 * time.Millisecond)
 					return nil
 				}),
 			)
 		}()
-
 	}
+	submitWG.Wait()
 	agilePool.Wait()
-	assert.LessOrEqual(t, maxWorkerNum, 10000)
+	assert.LessOrEqual(t, maxWorkerNum, workerCapacity)
 }
 
 func TestAgilePoolWorkerCompletion(t *testing.T) {
+	taskCount := 1000000
+	if testing.Short() {
+		taskCount = 20000
+	}
+
 	var sum int64
-	sum = 0
 	agilePool := agilepool.NewPool(agilepool.NewConfig(
 		agilepool.WithWorkerNumCapacity(10000),
 		agilepool.WithIdleContainerType(agilepool.MinHeapType),
 	))
+	defer agilePool.Close()
 
-	for i := 0; i < 1000000; i++ {
-
+	var submitWG sync.WaitGroup
+	for i := 0; i < taskCount; i++ {
+		submitWG.Add(1)
 		go func() {
+			defer submitWG.Done()
 			agilePool.Submit(
 				agilepool.TaskFunc(func() error {
 					atomic.AddInt64(&sum, int64(1))
@@ -58,25 +80,32 @@ func TestAgilePoolWorkerCompletion(t *testing.T) {
 				}),
 			)
 		}()
-
 	}
 
+	submitWG.Wait()
 	agilePool.Wait()
 
-	assert.Equal(t, sum, int64(1000000))
+	assert.Equal(t, int64(taskCount), sum)
 }
 
 func TestAgilePoolSubmitBeforeCompletion(t *testing.T) {
+	taskCount := 1000000
+	if testing.Short() {
+		taskCount = 20000
+	}
+
 	var sum int64
-	sum = 0
 	agilePool := agilepool.NewPool(agilepool.NewConfig(
 		agilepool.WithWorkerNumCapacity(10000),
 		agilepool.WithIdleContainerType(agilepool.MinHeapType),
 	))
+	defer agilePool.Close()
 
-	for i := 0; i < 1000000; i++ {
-
+	var submitWG sync.WaitGroup
+	for i := 0; i < taskCount; i++ {
+		submitWG.Add(1)
 		go func() {
+			defer submitWG.Done()
 			agilePool.SubmitBefore(
 				agilepool.TaskFunc(func() error {
 					time.Sleep(10 * time.Millisecond)
@@ -85,11 +114,11 @@ func TestAgilePoolSubmitBeforeCompletion(t *testing.T) {
 				}), 10*time.Second,
 			)
 		}()
-
 	}
 
+	submitWG.Wait()
 	agilePool.Wait()
-	assert.Equal(t, sum, int64(1000000))
+	assert.Equal(t, int64(taskCount), sum)
 }
 
 func TestAgilePoolTaskRetryTimes(t *testing.T) {
@@ -171,11 +200,15 @@ func TestAgilePoolTaskPanicDoesNotBreakPool(t *testing.T) {
 // isolated pool lifetimes to amplify the exposure.
 func TestAgilePoolRaceStuckTaskInQueue(t *testing.T) {
 	const (
-		iterations = 5000
-		batchSize  = 200
-		capacity   = int64(1)
-		deadline   = 2 * time.Second
+		batchSize = 200
+		capacity  = int64(1)
+		deadline  = 2 * time.Second
 	)
+
+	iterations := 5000
+	if testing.Short() {
+		iterations = 250
+	}
 
 	tests := []struct {
 		name          string
