@@ -24,6 +24,7 @@
 - Automatic idle worker cleanup.
 - Pluggable idle worker containers: FIFO linked list or min-heap ordered by last active time.
 - Retryable tasks with exponential backoff or a custom backoff strategy.
+- Context-aware submission and cooperative cancellation for running tasks.
 - `Wait` and `Close` helpers for graceful shutdown.
 - Custom logger support for integrating pool logs into your application logger.
 
@@ -96,6 +97,32 @@ pool.Submit(agilepool.TaskFunc(func() error {
 ```
 
 `TaskFunc` returns an error for compatibility with retryable task patterns, but plain `Submit` does not inspect the returned error. Use `TaskWithRetry` when failures should trigger retries.
+
+## Submit With Context
+
+Use `SubmitCtx` when a task needs cancellation support, and check the same `ctx` inside the task closure:
+
+```go
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+pool.SubmitCtx(ctx, agilepool.TaskFunc(func() error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		// Do work here.
+		return nil
+	}
+}))
+```
+
+`SubmitCtx` cancellation behavior:
+
+- If `ctx` is already canceled before submission, the task is not accepted.
+- In `BLOCK` mode, if the queue is full, submission waits for queue space; cancellation while waiting drops the submission.
+- If the task has already been queued but has not started, the worker checks `ctx` after dequeue and skips execution when it is canceled.
+- If the task has already started, the pool does not forcibly stop the goroutine; the task must check `ctx.Done()` itself or pass `ctx` to downstream HTTP, database, RPC, or similar calls.
 
 ## Submit Before a Deadline
 

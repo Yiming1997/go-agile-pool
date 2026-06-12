@@ -24,6 +24,7 @@
 - 自动清理超时空闲 worker。
 - 可插拔空闲 worker 容器：FIFO 链表，或按最后活跃时间排序的最小堆。
 - 支持带重试次数的任务，可使用指数退避或自定义退避策略。
+- 支持基于 `context.Context` 的提交取消和执行中协作取消。
 - 提供 `Wait` 和 `Close`，便于优雅关闭。
 - 支持自定义 logger，方便接入应用自己的日志系统。
 
@@ -96,6 +97,32 @@ pool.Submit(agilepool.TaskFunc(func() error {
 ```
 
 `TaskFunc` 返回 `error` 是为了兼容可重试任务模式，但普通 `Submit` 不会检查这个返回值。如果失败后需要自动重试，请使用 `TaskWithRetry`。
+
+## 带 Context 提交任务
+
+当任务需要支持取消时，可以使用 `SubmitCtx`，并在任务闭包中检查同一个 `ctx`：
+
+```go
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+pool.SubmitCtx(ctx, agilepool.TaskFunc(func() error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		// 执行任务逻辑。
+		return nil
+	}
+}))
+```
+
+`SubmitCtx` 的取消语义：
+
+- 如果提交前 `ctx` 已取消，任务不会被接收。
+- 如果 `BLOCK` 模式下队列已满，提交会等待队列空间；等待期间 `ctx` 取消后会放弃提交。
+- 如果任务已入队但还没开始执行，worker 取到任务后会检查 `ctx`，已取消则跳过执行。
+- 如果任务已经开始执行，池不会强制停止 goroutine；任务需要主动检查 `ctx.Done()` 或把 `ctx` 传给 HTTP、数据库、RPC 等下游调用。
 
 ## 在截止时间前提交
 
