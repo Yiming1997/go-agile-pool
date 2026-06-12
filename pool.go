@@ -116,7 +116,7 @@ func (p *Pool) Submit(task Task) {
 		return
 	}
 
-	p.submit(task, nil)
+	p.submit(nil, task)
 }
 
 func (p *Pool) SubmitCtx(ctx context.Context, task Task) {
@@ -130,13 +130,13 @@ func (p *Pool) SubmitCtx(ctx context.Context, task Task) {
 		return
 	}
 
-	p.submit(&contextTask{
+	p.submit(ctx, &contextTask{
 		ctx:  ctx,
 		task: task,
-	}, ctx)
+	})
 }
 
-func (p *Pool) submit(task Task, ctx context.Context) {
+func (p *Pool) submit(ctx context.Context, task Task) {
 	// Reject new submissions once Close has been called. We check before
 	// wg.Add so that a closed pool's Wait() can still return promptly for
 	// in-flight tasks and is not blocked by post-close submissions.
