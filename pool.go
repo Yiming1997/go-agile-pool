@@ -124,17 +124,33 @@ func (p *Pool) Submit(task Task) {
 	p.lock.Lock()
 
 	if atomic.LoadInt64(&p.runningWorkersNum) < p.capacity {
-		p.addRunningWorkersNum(1)
 		p.lock.Unlock()
 		p.muIdle.Lock()
 		w := p.idleWorks.Pop()
 		p.muIdle.Unlock()
 		if w != nil {
+			p.addRunningWorkersNum(1)
 			go w.run(task)
-		} else {
-			w := p.workerPool.Get().(*worker)
-			go w.run(task)
+			return
 		}
+
+		// No idle worker: push task to queue and let existing workers consume it.
+		// This avoids creating a new worker for every submission, reducing churn.
+		p.taskQueue <- task
+
+		// Safety net: if no workers are running, spawn exactly one consumer.
+		// Spawning queueLen workers when running==0 causes them to drain the
+		// queue in a burst then all exit, creating a wasteful create/destroy cycle.
+		p.lock.Lock()
+		running := atomic.LoadInt64(&p.runningWorkersNum)
+		if running == 0 {
+			p.addRunningWorkersNum(1)
+			p.lock.Unlock()
+			w := p.workerPool.Get().(*worker)
+			go w.run(nil)
+			return
+		}
+		p.lock.Unlock()
 		return
 	}
 	p.lock.Unlock()
