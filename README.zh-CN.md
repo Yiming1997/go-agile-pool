@@ -24,6 +24,7 @@
 - 自动清理超时空闲 worker。
 - 可插拔空闲 worker 容器：FIFO 链表，或按最后活跃时间排序的最小堆。
 - 支持带重试次数的任务，可使用指数退避或自定义退避策略。
+- 支持基于 `context.Context` 的提交取消和执行中协作取消。
 - 提供 `Wait` 和 `Close`，便于优雅关闭。
 - 支持自定义 logger，方便接入应用自己的日志系统。
 
@@ -96,6 +97,32 @@ pool.Submit(agilepool.TaskFunc(func() error {
 ```
 
 `TaskFunc` 返回 `error` 是为了兼容可重试任务模式，但普通 `Submit` 不会检查这个返回值。如果失败后需要自动重试，请使用 `TaskWithRetry`。
+
+## 带 Context 提交任务
+
+当任务需要支持取消时，可以使用 `SubmitCtx`，并在任务闭包中检查同一个 `ctx`：
+
+```go
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+pool.SubmitCtx(ctx, agilepool.TaskFunc(func() error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		// 执行任务逻辑。
+		return nil
+	}
+}))
+```
+
+`SubmitCtx` 的取消语义：
+
+- 如果提交前 `ctx` 已取消，任务不会被接收。
+- 如果 `BLOCK` 模式下队列已满，提交会等待队列空间；等待期间 `ctx` 取消后会放弃提交。
+- 如果任务已入队但还没开始执行，worker 取到任务后会检查 `ctx`，已取消则跳过执行。
+- 如果任务已经开始执行，池不会强制停止 goroutine；任务需要主动检查 `ctx.Done()` 或把 `ctx` 传给 HTTP、数据库、RPC 等下游调用。
 
 ## 在截止时间前提交
 
@@ -185,4 +212,92 @@ go test -bench=. -benchtime=1x -timeout=2h -run=^$ -count=1
 go test -bench=BenchmarkAgilePoolMinHeap -benchtime=1x -timeout=2h -run=^$ -count=1
 ```
 
-当前基准测试会比较并发提交、顺序提交、两种空闲容器实现，以及原生 goroutine 基线。
+以下基准测试代码仅测试 go-agile-pool 自身。保存为 `_test.go` 文件后运行：
+
+```bash
+go test -bench=BenchmarkAgilePool -benchtime=1x -timeout=2h -run=^$
+```
+
+```go
+package agilepool_test
+
+import (
+	"testing"
+	"time"
+
+	agilepool "github.com/Yiming1997/go-agile-pool"
+)
+
+const taskCount = 10000000
+
+// 并发提交基准测试
+func BenchmarkAgilePoolMinHeap(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		pool := agilepool.NewPool(agilepool.NewConfig(
+			agilepool.WithWorkerNumCapacity(20000),
+			agilepool.WithIdleContainerType(agilepool.MinHeapType),
+		))
+
+		for j := 0; j < taskCount; j++ {
+			go func() {
+				pool.Submit(agilepool.TaskFunc(func() error {
+					time.Sleep(10 * time.Millisecond)
+					return nil
+				}))
+			}()
+		}
+		pool.Wait()
+		pool.Close()
+	}
+}
+
+// 顺序提交基准测试
+func BenchmarkAgilePoolSequentialLinkedList(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		pool := agilepool.NewPool(agilepool.NewConfig(
+			agilepool.WithWorkerNumCapacity(20000),
+			agilepool.WithIdleContainerType(agilepool.LinkedListType),
+		))
+
+		for j := 0; j < taskCount; j++ {
+			pool.Submit(agilepool.TaskFunc(func() error {
+				time.Sleep(10 * time.Millisecond)
+				return nil
+			}))
+		}
+		pool.Wait()
+		pool.Close()
+	}
+}
+```
+
+> **提示**：可调整 `taskCount` 快速测试（如 `1000`）。
+
+完整基准测试会比较并发提交、顺序提交、多种空闲容器实现，以及原生 goroutine 和流行的 goroutine 池库。所有基准测试模拟 IO 密集型任务，使用 `time.Sleep(10 * time.Millisecond)`，运行 **1000 万任务**（worker 容量 = 20,000，go 1.23，通过 `b.ReportAllocs()` 测量）。
+
+**并发提交（1000 万任务）：**
+
+| 库 | 耗时 | 内存 | 分配次数 |
+|------|------|--------|---------|
+| **AgilePool MinHeap** | 6.20s | 463.4 MB | 10,303,830 |
+| **AgilePool LinkedList** | 6.95s | 419.5 MB | 10,202,989 |
+| Native(sem) | 6.65s | 1,201.2 MB | 20,002,053 |
+| Ants | 9.40s | 495.9 MB | 20,184,630 |
+| Pond | 26.9s | 4,328.9 MB | 73,225,096 |
+| Gowp | 9.80s | 2,185.1 MB | 20,219,299 |
+
+AgilePool MinHeap **速度最快**（6.20s）且 **内存最优**（463.4 MB）。Native(sem) 速度接近但内存是其 2.6 倍。Pond 在所有指标中表现最差。
+
+**顺序提交（1000 万任务）：**
+
+| 库 | 耗时 | 内存 | 分配次数 |
+|------|------|--------|---------|
+| **AgilePool Seq LinkedList** | 5.37s | 166.7 MB | 137,045 |
+| **AgilePool Seq Slice** | 5.34s | 167.5 MB | 103,834 |
+| **AgilePool Seq MinHeap** | 5.76s | 283.3 MB | 1,874,468 |
+| Ants Seq | 7.87s | 171.5 MB | 10,140,321 |
+| Pond Seq | 13.34s | 3,363.9 MB | 80,004,361 |
+| Gowp Seq | 6.07s | 1,929.9 MB | 10,061,537 |
+

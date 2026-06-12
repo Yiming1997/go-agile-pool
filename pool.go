@@ -114,6 +114,31 @@ func (p *Pool) SetLogger(l Logger) {
 }
 
 func (p *Pool) Submit(task Task) {
+	if isNilTask(task) {
+		return
+	}
+
+	p.submit(context.Background(), task)
+}
+
+func (p *Pool) SubmitCtx(ctx context.Context, task Task) {
+	if isNilTask(task) {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if ctx.Err() != nil {
+		return
+	}
+
+	p.submit(ctx, &contextTask{
+		ctx:  ctx,
+		task: task,
+	})
+}
+
+func (p *Pool) submit(ctx context.Context, task Task) {
 	// Reject new submissions once Close has been called. We check before
 	// wg.Add so that a closed pool's Wait() can still return promptly for
 	// in-flight tasks and is not blocked by post-close submissions.
@@ -143,7 +168,12 @@ func (p *Pool) Submit(task Task) {
 		return
 	}
 
-	p.taskQueue <- task
+	select {
+	case p.taskQueue <- task:
+	case <-ctx.Done():
+		p.wg.Done()
+		return
+	}
 
 	// Safety net: if workers exited between our capacity check and the push
 	// above, tasks could be stranded in the channel buffer with no consumer.
@@ -168,8 +198,24 @@ func (p *Pool) Submit(task Task) {
 	p.lock.Unlock()
 }
 
+type contextTask struct {
+	ctx  context.Context
+	task Task
+}
+
+func (t *contextTask) Process() {
+	if t.ctx.Err() != nil {
+		return
+	}
+	t.task.Process()
+}
+
 // Submits a task before the specified timeout. If timeout is reached during execution, the task is canceled.
 func (p *Pool) SubmitBefore(task Task, timeout time.Duration) {
+	if isNilTask(task) {
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	p.Submit(
 		TaskFunc(func() error {
@@ -183,6 +229,23 @@ func (p *Pool) SubmitBefore(task Task, timeout time.Duration) {
 			return nil
 		}),
 	)
+}
+
+func isNilTask(task Task) bool {
+	if task == nil {
+		return true
+	}
+
+	switch t := task.(type) {
+	case TaskFunc:
+		return t == nil
+	case *TaskWithRetry:
+		return t == nil
+	case *contextTask:
+		return t == nil || isNilTask(t.task)
+	default:
+		return false
+	}
 }
 
 func (p *Pool) addToIdle(w *worker) {
