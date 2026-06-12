@@ -1,6 +1,7 @@
 package agilepool_test
 
 import (
+	"context"
 	"errors"
 	"io"
 	"log"
@@ -13,44 +14,202 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestAgilePoolWorkerCapacityLimit(t *testing.T) {
+func TestAgilePoolSubmitNilTaskDoesNotBlockWait(t *testing.T) {
+	agilePool := agilepool.NewPool(agilepool.NewConfig())
+	defer agilePool.Close()
+
+	agilePool.Submit(nil)
+	agilePool.Wait()
+}
+
+func TestAgilePoolSubmitTypedNilTaskDoesNotBlockWait(t *testing.T) {
+	agilePool := agilepool.NewPool(agilepool.NewConfig())
+	defer agilePool.Close()
+
+	var task agilepool.TaskFunc
+	agilePool.Submit(task)
+	agilePool.Wait()
+}
+
+func TestAgilePoolSubmitBeforeNilTaskDoesNotBlockWait(t *testing.T) {
+	agilePool := agilepool.NewPool(agilepool.NewConfig())
+	defer agilePool.Close()
+
+	agilePool.SubmitBefore(nil, time.Second)
+	agilePool.Wait()
+}
+
+func TestAgilePoolSubmitCtxCanceledBeforeSubmitDoesNotExecute(t *testing.T) {
+	agilePool := agilepool.NewPool(agilepool.NewConfig())
+	defer agilePool.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var executed int64
+	agilePool.SubmitCtx(ctx, agilepool.TaskFunc(func() error {
+		atomic.AddInt64(&executed, 1)
+		return nil
+	}))
+	agilePool.Wait()
+
+	assert.Equal(t, int64(0), atomic.LoadInt64(&executed))
+}
+
+func TestAgilePoolSubmitCtxCanceledWhileQueuedSkipsTask(t *testing.T) {
 	agilePool := agilepool.NewPool(agilepool.NewConfig(
-		agilepool.WithWorkerNumCapacity(10000),
+		agilepool.WithWorkerNumCapacity(1),
+		agilepool.WithTaskQueueSize(10),
+	))
+	defer agilePool.Close()
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	agilePool.Submit(agilepool.TaskFunc(func() error {
+		close(started)
+		<-release
+		return nil
+	}))
+	<-started
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var executed int64
+	agilePool.SubmitCtx(ctx, agilepool.TaskFunc(func() error {
+		atomic.AddInt64(&executed, 1)
+		return nil
+	}))
+	cancel()
+	close(release)
+	agilePool.Wait()
+
+	assert.Equal(t, int64(0), atomic.LoadInt64(&executed))
+}
+
+func TestAgilePoolSubmitCtxRunningTaskObservesCancel(t *testing.T) {
+	agilePool := agilepool.NewPool(agilepool.NewConfig())
+	defer agilePool.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	started := make(chan struct{})
+	var canceled int64
+
+	agilePool.SubmitCtx(ctx, agilepool.TaskFunc(func() error {
+		close(started)
+		<-ctx.Done()
+		atomic.AddInt64(&canceled, 1)
+		return ctx.Err()
+	}))
+	<-started
+	cancel()
+	agilePool.Wait()
+
+	assert.Equal(t, int64(1), atomic.LoadInt64(&canceled))
+}
+
+func TestAgilePoolSubmitCtxCancelsWhileWaitingForQueueSpace(t *testing.T) {
+	agilePool := agilepool.NewPool(agilepool.NewConfig(
+		agilepool.WithWorkerNumCapacity(1),
+		agilepool.WithTaskQueueSize(1),
+	))
+	defer agilePool.Close()
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	agilePool.Submit(agilepool.TaskFunc(func() error {
+		close(started)
+		<-release
+		return nil
+	}))
+	<-started
+
+	agilePool.Submit(agilepool.TaskFunc(func() error {
+		return nil
+	}))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	returned := make(chan struct{})
+	var executed int64
+	go func() {
+		agilePool.SubmitCtx(ctx, agilepool.TaskFunc(func() error {
+			atomic.AddInt64(&executed, 1)
+			return nil
+		}))
+		close(returned)
+	}()
+
+	cancel()
+	select {
+	case <-returned:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("SubmitCtx did not return after context cancellation")
+	}
+
+	close(release)
+	agilePool.Wait()
+
+	assert.Equal(t, int64(0), atomic.LoadInt64(&executed))
+}
+
+func TestAgilePoolWorkerCapacityLimit(t *testing.T) {
+	taskCount := 10000000
+	workerCapacity := int64(10000)
+	if testing.Short() {
+		taskCount = 20000
+		workerCapacity = 100
+	}
+
+	agilePool := agilepool.NewPool(agilepool.NewConfig(
+		agilepool.WithWorkerNumCapacity(workerCapacity),
 		agilepool.WithIdleContainerType(agilepool.MinHeapType),
 	))
+	defer agilePool.Close()
 
-	var maxWorkerNum int = 0
+	var maxWorkerNum int64
+	var submitWG sync.WaitGroup
 
-	for i := 0; i < 10000000; i++ {
-
+	for i := 0; i < taskCount; i++ {
+		submitWG.Add(1)
 		go func() {
+			defer submitWG.Done()
 			agilePool.Submit(
 				agilepool.TaskFunc(func() error {
-					if int(agilePool.GetRunningWorkersNum()) > maxWorkerNum {
-						maxWorkerNum = int(agilePool.GetRunningWorkersNum())
+					running := agilePool.GetRunningWorkersNum()
+					for {
+						currentMax := atomic.LoadInt64(&maxWorkerNum)
+						if running <= currentMax ||
+							atomic.CompareAndSwapInt64(&maxWorkerNum, currentMax, running) {
+							break
+						}
 					}
 					time.Sleep(10 * time.Millisecond)
 					return nil
 				}),
 			)
 		}()
-
 	}
+	submitWG.Wait()
 	agilePool.Wait()
-	assert.LessOrEqual(t, maxWorkerNum, 10000)
+	assert.LessOrEqual(t, maxWorkerNum, workerCapacity)
 }
 
 func TestAgilePoolWorkerCompletion(t *testing.T) {
+	taskCount := 1000000
+	if testing.Short() {
+		taskCount = 20000
+	}
+
 	var sum int64
-	sum = 0
 	agilePool := agilepool.NewPool(agilepool.NewConfig(
 		agilepool.WithWorkerNumCapacity(10000),
 		agilepool.WithIdleContainerType(agilepool.MinHeapType),
 	))
+	defer agilePool.Close()
 
-	for i := 0; i < 1000000; i++ {
-
+	var submitWG sync.WaitGroup
+	for i := 0; i < taskCount; i++ {
+		submitWG.Add(1)
 		go func() {
+			defer submitWG.Done()
 			agilePool.Submit(
 				agilepool.TaskFunc(func() error {
 					atomic.AddInt64(&sum, int64(1))
@@ -58,25 +217,32 @@ func TestAgilePoolWorkerCompletion(t *testing.T) {
 				}),
 			)
 		}()
-
 	}
 
+	submitWG.Wait()
 	agilePool.Wait()
 
-	assert.Equal(t, sum, int64(1000000))
+	assert.Equal(t, int64(taskCount), sum)
 }
 
 func TestAgilePoolSubmitBeforeCompletion(t *testing.T) {
+	taskCount := 1000000
+	if testing.Short() {
+		taskCount = 20000
+	}
+
 	var sum int64
-	sum = 0
 	agilePool := agilepool.NewPool(agilepool.NewConfig(
 		agilepool.WithWorkerNumCapacity(10000),
 		agilepool.WithIdleContainerType(agilepool.MinHeapType),
 	))
+	defer agilePool.Close()
 
-	for i := 0; i < 1000000; i++ {
-
+	var submitWG sync.WaitGroup
+	for i := 0; i < taskCount; i++ {
+		submitWG.Add(1)
 		go func() {
+			defer submitWG.Done()
 			agilePool.SubmitBefore(
 				agilepool.TaskFunc(func() error {
 					time.Sleep(10 * time.Millisecond)
@@ -85,11 +251,11 @@ func TestAgilePoolSubmitBeforeCompletion(t *testing.T) {
 				}), 10*time.Second,
 			)
 		}()
-
 	}
 
+	submitWG.Wait()
 	agilePool.Wait()
-	assert.Equal(t, sum, int64(1000000))
+	assert.Equal(t, int64(taskCount), sum)
 }
 
 func TestAgilePoolTaskRetryTimes(t *testing.T) {
@@ -171,55 +337,74 @@ func TestAgilePoolTaskPanicDoesNotBreakPool(t *testing.T) {
 // isolated pool lifetimes to amplify the exposure.
 func TestAgilePoolRaceStuckTaskInQueue(t *testing.T) {
 	const (
-		iterations = 5000
-		batchSize  = 200
-		capacity   = int64(1)
-		deadline   = 2 * time.Second
+		batchSize = 200
+		capacity  = int64(1)
+		deadline  = 2 * time.Second
 	)
 
-	for iter := 0; iter < iterations; iter++ {
-		p := agilepool.NewPool(agilepool.NewConfig(
-			agilepool.WithWorkerNumCapacity(capacity),
-			agilepool.WithTaskQueueSize(10000),
-		))
+	iterations := 5000
+	if testing.Short() {
+		iterations = 250
+	}
 
-		var executed int64
-		var submitWG sync.WaitGroup
+	tests := []struct {
+		name          string
+		containerType agilepool.IdleContainerType
+	}{
+		{name: "linked_list", containerType: agilepool.LinkedListType},
+		{name: "min_heap", containerType: agilepool.MinHeapType},
+		{name: "slice", containerType: agilepool.SliceType},
+	}
 
-		// Submit batchSize tasks concurrently from batchSize goroutines.
-		// High concurrency maximizes lock contention and widens the race window.
-		for i := 0; i < batchSize; i++ {
-			submitWG.Add(1)
-			go func() {
-				defer submitWG.Done()
-				p.Submit(agilepool.TaskFunc(func() error {
-					atomic.AddInt64(&executed, 1)
-					return nil
-				}))
-			}()
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for iter := 0; iter < iterations; iter++ {
+				p := agilepool.NewPool(agilepool.NewConfig(
+					agilepool.WithWorkerNumCapacity(capacity),
+					agilepool.WithTaskQueueSize(10000),
+					agilepool.WithIdleContainerType(tt.containerType),
+				))
 
-		// Wait until all Submit calls have returned.
-		// After this point no more tasks will be submitted — this is the
-		// critical "end-of-life" moment where the race becomes visible.
-		submitWG.Wait()
+				var executed int64
+				var submitWG sync.WaitGroup
 
-		// Run pool.Wait() in a goroutine; if it doesn't return within the
-		// deadline, a task is stranded in the queue and wg.Done() was never
-		// called for it → the race triggered.
-		done := make(chan struct{})
-		go func() {
-			p.Wait()
-			close(done)
-		}()
+				// Submit batchSize tasks concurrently from batchSize goroutines.
+				// High concurrency maximizes lock contention and widens the race window.
+				for i := 0; i < batchSize; i++ {
+					submitWG.Add(1)
+					go func() {
+						defer submitWG.Done()
+						p.Submit(agilepool.TaskFunc(func() error {
+							atomic.AddInt64(&executed, 1)
+							return nil
+						}))
+					}()
+				}
 
-		select {
-		case <-done:
-			// All tasks completed, this iteration is clean.
-		case <-time.After(deadline):
-			t.Fatalf("iter %d: DEADLOCK after %v, executed=%d/%d, runningWorkers=%d",
-				iter, deadline, atomic.LoadInt64(&executed), batchSize,
-				p.GetRunningWorkersNum())
-		}
+				// Wait until all Submit calls have returned.
+				// After this point no more tasks will be submitted — this is the
+				// critical "end-of-life" moment where the race becomes visible.
+				submitWG.Wait()
+
+				// Run pool.Wait() in a goroutine; if it doesn't return within the
+				// deadline, a task is stranded in the queue and wg.Done() was never
+				// called for it, so the race triggered.
+				done := make(chan struct{})
+				go func() {
+					p.Wait()
+					close(done)
+				}()
+
+				select {
+				case <-done:
+					p.Close()
+				case <-time.After(deadline):
+					p.Close()
+					t.Fatalf("iter %d: DEADLOCK after %v, executed=%d/%d, runningWorkers=%d",
+						iter, deadline, atomic.LoadInt64(&executed), batchSize,
+						p.GetRunningWorkersNum())
+				}
+			}
+		})
 	}
 }
