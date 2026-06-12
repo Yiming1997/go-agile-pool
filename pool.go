@@ -116,7 +116,7 @@ func (p *Pool) Submit(task Task) {
 		return
 	}
 
-	p.submit(nil, task)
+	p.submit(context.Background(), task)
 }
 
 func (p *Pool) SubmitCtx(ctx context.Context, task Task) {
@@ -166,15 +166,11 @@ func (p *Pool) submit(ctx context.Context, task Task) {
 		return
 	}
 
-	if ctx == nil {
-		p.taskQueue <- task
-	} else {
-		select {
-		case p.taskQueue <- task:
-		case <-ctx.Done():
-			p.wg.Done()
-			return
-		}
+	select {
+	case p.taskQueue <- task:
+	case <-ctx.Done():
+		p.wg.Done()
+		return
 	}
 
 	// Safety net: if workers exited between our capacity check and the push
