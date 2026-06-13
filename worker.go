@@ -1,7 +1,6 @@
 package agilepool
 
 import (
-	"runtime/debug"
 	"time"
 )
 
@@ -88,7 +87,7 @@ loop:
 func (w *worker) runTask(task Task) {
 	defer func() {
 		if p := recover(); p != nil {
-			w.pool.logger.Printf("worker exits from panic: %v\n%s\n", p, debug.Stack())
+			w.pool.logger.Printf("worker exits from panic: %v\n%s\n", p, Stack(1))
 		}
 	}()
 	defer w.pool.done()
