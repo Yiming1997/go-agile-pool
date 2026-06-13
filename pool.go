@@ -85,6 +85,8 @@ func NewPool(c *Config) *Pool {
 		p.idleWorks = newMinHeap()
 	case SliceType:
 		p.idleWorks = newSlice()
+	case RingQueueType:
+		p.idleWorks = newRingQueue()
 	default:
 		p.idleWorks = newLinkedList()
 	}
