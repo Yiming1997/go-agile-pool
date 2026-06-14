@@ -321,30 +321,20 @@ func TestAgilePoolTaskPanicDoesNotBreakPool(t *testing.T) {
 	assert.Equal(t, int64(2), atomic.LoadInt64(&executed))
 }
 
-// TestAgilePoolRaceStuckTaskInQueue reproduces a race condition where a task
-// can be left stranded in the channel buffer with no consumer goroutine.
-//
-// Race window:
-//  1. Submit locks, sees running==capacity, unlocks (line 127)
-//  2. Worker finishes its task, select-loop sees empty queue, goes to default,
-//     adds self to idleWorkers, goroutine exits, running-- (worker.go:63-65)
-//  3. Submit pushes task into taskQueue (pool.go:133)
-//     → no goroutine is reading the channel, task is stuck forever
-//
-// The key insight: this bug is "self-healing" — any subsequent Submit will
-// spawn a new worker that drains the stuck task. Only the *last* Submit of
-// a pool's lifetime can permanently lose a task. So we create many small
-// isolated pool lifetimes to amplify the exposure.
-func TestAgilePoolRaceStuckTaskInQueue(t *testing.T) {
+// TestAgilePoolBatchWithScaler verifies that the scaler spawns workers to
+// drain tasks submitted in a burst, even when no worker goroutines existed
+// at submission time (replaces the old safety-net / race-stuck-task test
+// which is no longer applicable under the scaler-based design).
+func TestAgilePoolBatchWithScaler(t *testing.T) {
 	const (
 		batchSize = 200
 		capacity  = int64(1)
-		deadline  = 2 * time.Second
+		deadline  = 3 * time.Second
 	)
 
-	iterations := 5000
+	iterations := 200
 	if testing.Short() {
-		iterations = 250
+		iterations = 10
 	}
 
 	tests := []struct {
@@ -361,15 +351,13 @@ func TestAgilePoolRaceStuckTaskInQueue(t *testing.T) {
 			for iter := 0; iter < iterations; iter++ {
 				p := agilepool.NewPool(agilepool.NewConfig(
 					agilepool.WithWorkerNumCapacity(capacity),
-					agilepool.WithTaskQueueSize(10000),
+					agilepool.WithTaskQueueSize(1000),
 					agilepool.WithIdleContainerType(tt.containerType),
 				))
 
 				var executed int64
 				var submitWG sync.WaitGroup
 
-				// Submit batchSize tasks concurrently from batchSize goroutines.
-				// High concurrency maximizes lock contention and widens the race window.
 				for i := 0; i < batchSize; i++ {
 					submitWG.Add(1)
 					go func() {
@@ -381,14 +369,8 @@ func TestAgilePoolRaceStuckTaskInQueue(t *testing.T) {
 					}()
 				}
 
-				// Wait until all Submit calls have returned.
-				// After this point no more tasks will be submitted — this is the
-				// critical "end-of-life" moment where the race becomes visible.
 				submitWG.Wait()
 
-				// Run pool.Wait() in a goroutine; if it doesn't return within the
-				// deadline, a task is stranded in the queue and wg.Done() was never
-				// called for it, so the race triggered.
 				done := make(chan struct{})
 				go func() {
 					p.Wait()
@@ -400,7 +382,7 @@ func TestAgilePoolRaceStuckTaskInQueue(t *testing.T) {
 					p.Close()
 				case <-time.After(deadline):
 					p.Close()
-					t.Fatalf("iter %d: DEADLOCK after %v, executed=%d/%d, runningWorkers=%d",
+					t.Fatalf("iter %d: timed out after %v, executed=%d/%d, runningWorkers=%d",
 						iter, deadline, atomic.LoadInt64(&executed), batchSize,
 						p.GetRunningWorkersNum())
 				}

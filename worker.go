@@ -1,6 +1,7 @@
 package agilepool
 
 import (
+	"sync/atomic"
 	"time"
 )
 
@@ -36,6 +37,7 @@ loop:
 			if !ok {
 				w.pool.logger.Println("taskQueue closed,exiting")
 				w.pool.addRunningWorkersNum(-1)
+				atomic.AddInt64(&w.pool.exitCount, 1)
 				w.pool.workerPool.Put(w)
 				return
 			}
@@ -43,6 +45,7 @@ loop:
 			if task == nil {
 				w.pool.logger.Println("nil task received, exiting")
 				w.pool.addRunningWorkersNum(-1)
+				atomic.AddInt64(&w.pool.exitCount, 1)
 				w.pool.workerPool.Put(w)
 				return
 			}
@@ -61,12 +64,14 @@ loop:
 				if !ok {
 					w.pool.logger.Println("taskQueue closed,exiting")
 					w.pool.addRunningWorkersNum(-1)
+					atomic.AddInt64(&w.pool.exitCount, 1)
 					w.pool.workerPool.Put(w)
 					return
 				}
 				if task == nil {
 					w.pool.logger.Println("nil task received, exiting")
 					w.pool.addRunningWorkersNum(-1)
+					atomic.AddInt64(&w.pool.exitCount, 1)
 					w.pool.workerPool.Put(w)
 					return
 				}
@@ -75,9 +80,10 @@ loop:
 			default:
 				// w is being parked in idleWorks; do NOT also put it in
 				// workerPool.sync.Pool — see the note at the top of run().
-				w.pool.addToIdle(w)
 				w.pool.addRunningWorkersNum(-1)
+				atomic.AddInt64(&w.pool.exitCount, 1)
 				w.pool.lock.Unlock()
+				w.pool.addToIdle(w)
 				break loop
 			}
 		}
@@ -85,6 +91,7 @@ loop:
 }
 
 func (w *worker) runTask(task Task) {
+	atomic.AddInt64(&w.pool.consumeCount, 1)
 	defer func() {
 		if p := recover(); p != nil {
 			w.pool.logger.Printf("worker exits from panic: %v\n%s\n", p, Stack(1))
