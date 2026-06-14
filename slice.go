@@ -1,7 +1,6 @@
 package agilepool
 
 import (
-	"sort"
 	"sync/atomic"
 	"time"
 )
@@ -35,28 +34,27 @@ func (s *Slice) Pop() *worker {
 }
 
 // RemoveExpired removes all workers whose lastActiveAt + expiry <= now.
-// Since workers are ordered by lastActiveAt (FIFO), expired workers are
-// clustered at the front. Uses binary search to find the first non-expired
-// worker. O(log n + k) where k is the number of expired workers removed.
+// Workers are ordered by insertion time, which does not guarantee monotonic
+// lastActiveAt values, so all workers must be scanned. Survivors retain FIFO
+// order. O(n) where n is the number of idle workers.
 func (s *Slice) RemoveExpired(now time.Time, expiry time.Duration) int {
 	if s.Len() == 0 {
 		return 0
 	}
 
 	cutoff := now.Add(-expiry)
-
-	// Use sort.Search for binary search
-	removed := sort.Search(len(s.workers), func(i int) bool {
-		return s.workers[i].lastActiveAt.After(cutoff)
-	})
-
-	// Clear references to avoid memory leak
-	for i := 0; i < removed; i++ {
-		s.workers[i] = nil
+	originalLen := len(s.workers)
+	survivors := s.workers[:0]
+	for _, w := range s.workers {
+		if w.lastActiveAt.After(cutoff) {
+			survivors = append(survivors, w)
+		}
 	}
 
+	removed := originalLen - len(survivors)
 	if removed > 0 {
-		s.workers = s.workers[removed:]
+		clear(s.workers[len(survivors):])
+		s.workers = survivors
 		atomic.AddInt64(&s.length, -int64(removed))
 	}
 
