@@ -129,16 +129,18 @@ type phase struct {
 }
 
 // dispenseTokens 令牌发放函数：按 phases 定义的速率向 tokenCh 发放令牌
-func dispenseTokens(tokenCh chan struct{}, phases []phase, tickInterval time.Duration) {
+func dispenseTokens(b *testing.B, shard int, tokenCh chan struct{}, phases []phase, tickInterval time.Duration) {
 	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
-	for _, p := range phases {
+	for phaseIndex, p := range phases {
+		start := time.Now()
 		for t := 0; t < p.ticks; t++ {
 			<-ticker.C
 			for j := 0; j < p.tokens; j++ {
 				tokenCh <- struct{}{}
 			}
 		}
+		b.Logf("shard %d phase %d elapsed: %v", shard, phaseIndex, time.Since(start))
 	}
 	close(tokenCh)
 }
@@ -160,16 +162,16 @@ func submitTasks(pool *agilepool.Pool, tokenCh chan struct{}, submitterCount int
 	}
 }
 
-// tokenbucket burst 20w ~ 200w tasks per sec, 10 shards
+// burst 20w ~ 150w tasks per sec, 10 shards
 func BenchmarkAgilePoolBurstMinHeap(b *testing.B) {
 	const (
 		submitterCount  = 20000   // 并发提交
-		baseRatePerSec  = 500000  // 基础速率/s
-		burstRatePerSec = 5000000 // 突发速率/s
+		baseRatePerSec  = 200000  // 基础速率/s
+		burstRatePerSec = 1500000 // 突发速率/s
 		tickInterval    = time.Millisecond
 		ticksPerSec     = int(time.Second / tickInterval) // 1000
 		basePerTick     = baseRatePerSec / ticksPerSec    // 200
-		burstPerTick    = burstRatePerSec / ticksPerSec   // 1000
+		burstPerTick    = burstRatePerSec / ticksPerSec   // 1500
 		numShards       = 10                              // 分片(单chan无法支持大量submitter)
 	)
 
@@ -196,7 +198,7 @@ func BenchmarkAgilePoolBurstMinHeap(b *testing.B) {
 		var submitWG sync.WaitGroup
 		for s := 0; s < numShards; s++ {
 			tokenCh := make(chan struct{}, 10000)
-			go dispenseTokens(tokenCh, phases, tickInterval)
+			go dispenseTokens(b, s, tokenCh, phases, tickInterval)
 			submitTasks(pool, tokenCh, submittersPerShard, &submitWG, &submittedCount)
 		}
 
@@ -210,12 +212,12 @@ func BenchmarkAgilePoolBurstMinHeap(b *testing.B) {
 func BenchmarkAgilePoolBurstLinkedList(b *testing.B) {
 	const (
 		submitterCount  = 20000   // 并发提交
-		baseRatePerSec  = 500000  // 基础速率/s
-		burstRatePerSec = 5000000 // 突发速率/s
+		baseRatePerSec  = 200000  // 基础速率/s
+		burstRatePerSec = 1500000 // 突发速率/s
 		tickInterval    = time.Millisecond
 		ticksPerSec     = int(time.Second / tickInterval) // 1000
 		basePerTick     = baseRatePerSec / ticksPerSec    // 200
-		burstPerTick    = burstRatePerSec / ticksPerSec   // 1000
+		burstPerTick    = burstRatePerSec / ticksPerSec   // 1500
 		numShards       = 10                              // 分片(单chan无法支持大量submitter)
 	)
 
@@ -242,7 +244,7 @@ func BenchmarkAgilePoolBurstLinkedList(b *testing.B) {
 		var submitWG sync.WaitGroup
 		for s := 0; s < numShards; s++ {
 			tokenCh := make(chan struct{}, 10000)
-			go dispenseTokens(tokenCh, phases, tickInterval)
+			go dispenseTokens(b, s, tokenCh, phases, tickInterval)
 			submitTasks(pool, tokenCh, submittersPerShard, &submitWG, &submittedCount)
 		}
 
