@@ -1,1 +1,5 @@
 /example/cpu_profile.prof
+.idea/
+*.bak
+*.txt
+*.log
