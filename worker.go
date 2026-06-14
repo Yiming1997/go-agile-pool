@@ -73,11 +73,13 @@ loop:
 				w.lastActiveAt = time.Now()
 				w.runTask(task)
 			default:
-				// w is being parked in idleWorks; do NOT also put it in
-				// workerPool.sync.Pool — see the note at the top of run().
-				w.pool.addToIdle(w)
+				// Decrement under lock so the safety net sees an accurate
+				// count.  Park (addToIdle) outside the lock to minimise
+				// the time p.lock is held — addToIdle uses its own muIdle
+				// mutex, so nesting it here only amplifies Unlock contention.
 				w.pool.addRunningWorkersNum(-1)
 				w.pool.lock.Unlock()
+				w.pool.addToIdle(w)
 				break loop
 			}
 		}
