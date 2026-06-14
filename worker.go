@@ -1,7 +1,6 @@
 package agilepool
 
 import (
-	"runtime/debug"
 	"sync/atomic"
 	"time"
 )
@@ -95,7 +94,7 @@ func (w *worker) runTask(task Task) {
 	atomic.AddInt64(&w.pool.consumeCount, 1)
 	defer func() {
 		if p := recover(); p != nil {
-			w.pool.logger.Printf("worker exits from panic: %v\n%s\n", p, debug.Stack())
+			w.pool.logger.Printf("worker exits from panic: %v\n%s\n", p, Stack(1))
 		}
 	}()
 	defer w.pool.done()
