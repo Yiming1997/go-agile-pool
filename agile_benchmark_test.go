@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	agilepool "github.com/Yiming1997/go-agile-pool"
+	agilepool "github.com/Yiming1997/agilePool"
 )
 
 const (

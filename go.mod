@@ -1,4 +1,4 @@
-module github.com/Yiming1997/go-agile-pool
+module github.com/Yiming1997/agilePool
 
 go 1.23.4
 

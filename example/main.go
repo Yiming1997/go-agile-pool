@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	agilepool "github.com/Yiming1997/go-agile-pool"
+	agilepool "github.com/Yiming1997/agilePool"
 )
 
 func main() {

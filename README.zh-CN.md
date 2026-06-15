@@ -1,21 +1,21 @@
-# go-agile-pool
+# agilePool
 
 <p align="center">
   <img src="assets/logo.jpg" alt="go-agile-pool logo" width="260">
 </p>
 
 <p align="center">
-  <a href="https://github.com/Yiming1997/go-agile-pool/actions/workflows/ci.yml"><img src="https://github.com/Yiming1997/go-agile-pool/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/Yiming1997/agilePool/actions/workflows/ci.yml"><img src="https://github.com/Yiming1997/agilePool/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/go-%3E%3D1.23.4-00ADD8" alt="Go Version"></a>
-  <a href="https://github.com/Yiming1997/go-agile-pool/tags"><img src="https://img.shields.io/github/v/tag/Yiming1997/go-agile-pool?label=tag" alt="Tag"></a>
-  <a href="https://pkg.go.dev/github.com/Yiming1997/go-agile-pool"><img src="https://pkg.go.dev/badge/github.com/Yiming1997/go-agile-pool.svg" alt="Go Reference"></a>
-  <a href="https://goreportcard.com/report/github.com/Yiming1997/go-agile-pool"><img src="https://goreportcard.com/badge/github.com/Yiming1997/go-agile-pool" alt="Go Report Card"></a>
+  <a href="https://github.com/Yiming1997/agilePool/tags"><img src="https://img.shields.io/github/v/tag/Yiming1997/go-agile-pool?label=tag" alt="Tag"></a>
+  <a href="https://pkg.go.dev/github.com/Yiming1997/agilePool"><img src="https://pkg.go.dev/badge/github.com/Yiming1997/agilePool.svg" alt="Go Reference"></a>
+  <a href="https://goreportcard.com/report/github.com/Yiming1997/agilePool"><img src="https://goreportcard.com/badge/github.com/Yiming1997/agilePool" alt="Go Report Card"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/Yiming1997/go-agile-pool" alt="License"></a>
 </p>
 
 [English](readme.md)
 
-`go-agile-pool` 是一个轻量级 Go goroutine 池。它提供有界 worker 并发、缓冲任务队列、空闲 worker 复用、可重试任务和优雅关闭能力，适合需要提交大量小型异步任务、同时又不希望无限制创建 goroutine 的应用。
+`agilePool` 是一个轻量级 Go goroutine 池。它提供有界 worker 并发、缓冲任务队列、空闲 worker 复用、可重试任务和优雅关闭能力，适合需要提交大量小型异步任务、同时又不希望无限制创建 goroutine 的应用。
 
 ## 特性
 
@@ -31,7 +31,7 @@
 ## 安装
 
 ```bash
-go get github.com/Yiming1997/go-agile-pool
+go get github.com/Yiming1997/agilePool
 ```
 
 ## 快速开始
@@ -42,7 +42,7 @@ package main
 import (
 	"time"
 
-	agilepool "github.com/Yiming1997/go-agile-pool"
+	agilepool "github.com/Yiming1997/agilePool"
 )
 
 func main() {
@@ -225,7 +225,7 @@ import (
 	"testing"
 	"time"
 
-	agilepool "github.com/Yiming1997/go-agile-pool"
+	agilepool "github.com/Yiming1997/agilePool"
 )
 
 const taskCount = 10000000
