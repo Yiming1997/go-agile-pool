@@ -1,4 +1,4 @@
-# go-agile-pool
+# agilePool
 
 <p align="center">
   <img src="assets/logo.jpg" alt="go-agile-pool logo" width="260">
@@ -15,7 +15,7 @@
 
 [简体中文](README.zh-CN.md)
 
-`go-agile-pool` is a lightweight goroutine pool for Go. It provides bounded worker concurrency, a buffered task queue, idle worker reuse, retryable tasks, and graceful shutdown helpers for applications that need to submit large numbers of small asynchronous jobs without creating unbounded goroutines.
+`agilePool` is a lightweight goroutine pool for Go. It provides bounded worker concurrency, a buffered task queue, idle worker reuse, retryable tasks, and graceful shutdown helpers for applications that need to submit large numbers of small asynchronous jobs without creating unbounded goroutines.
 
 ## Features
 
