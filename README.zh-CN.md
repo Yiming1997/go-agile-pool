@@ -1,4 +1,4 @@
-# go-agile-pool
+# agilePool
 
 <p align="center">
   <img src="assets/logo.jpg" alt="go-agile-pool logo" width="260">
@@ -15,7 +15,7 @@
 
 [English](readme.md)
 
-`go-agile-pool` 是一个轻量级 Go goroutine 池。它提供有界 worker 并发、缓冲任务队列、空闲 worker 复用、可重试任务和优雅关闭能力，适合需要提交大量小型异步任务、同时又不希望无限制创建 goroutine 的应用。
+`agilePool` 是一个轻量级 Go goroutine 池。它提供有界 worker 并发、缓冲任务队列、空闲 worker 复用、可重试任务和优雅关闭能力，适合需要提交大量小型异步任务、同时又不希望无限制创建 goroutine 的应用。
 
 ## 特性
 
